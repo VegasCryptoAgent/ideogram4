@@ -302,7 +302,7 @@ If you find the provided code or models useful for your research, consider citin
 
 
 ```bibtex
-@misc{ideogram4-2026,
+@misc{ideogram-4-2026,
     author={Ideogram AI},
     title={{Ideogram 4}},
     year={2026},
