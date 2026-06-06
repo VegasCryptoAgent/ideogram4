@@ -1,3 +1,8 @@
+// ============================================================
+// Shielded Privacy App — Privacy Score Calculator Service
+// ============================================================
+// Re-exports from the lib version and adds service-layer helpers.
+
 import type { BrokerRecord } from '@prisma/client';
 
 export type PrivacyScoreCategory = 'Exposed' | 'At Risk' | 'Protected' | 'Shielded';
@@ -64,6 +69,22 @@ function buildRecommendations(
   return recs;
 }
 
+/**
+ * Calculate a privacy score from 0–100 based on broker records.
+ *
+ * Score formula:
+ *   Start at 100
+ *   - Each "found" record (no removal): -2 points
+ *   - Each "removal_requested" / "opt_out_*": -1 point
+ *   - Each "removed": 0 (no deduction)
+ *   - Has breach alerts: -10 points
+ *
+ * Category:
+ *   0–40    → Exposed
+ *   41–70   → At Risk
+ *   71–90   → Protected
+ *   91–100  → Shielded
+ */
 export function calculatePrivacyScore(
   brokerRecords: BrokerRecordWithBroker[],
   hasBreachAlerts = false
@@ -91,6 +112,8 @@ export function calculatePrivacyScore(
         catData.found++;
         break;
       case 'removal_requested':
+      case 'opt_out_requested':
+      case 'opt_out_in_progress':
         score -= 1;
         totalPending++;
         catData.pending++;

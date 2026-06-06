@@ -1,0 +1,75 @@
+version: "3.9"
+
+# ─── Shielded Privacy — Local Development Stack ──────────────────────────────
+#
+# Services:
+#   postgres  — Primary database (PostgreSQL 16)
+#   redis     — BullMQ job queue + caching (Redis 7)
+#
+# Usage:
+#   docker compose up -d          # start in background
+#   docker compose down           # stop and remove containers
+#   docker compose down -v        # also remove volumes (clears all data)
+#   docker compose logs -f        # tail logs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: shielded-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shielded}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shielded_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-shielded}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shielded} -d ${POSTGRES_DB:-shielded}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - shielded
+
+  # ─── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: shielded-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - shielded
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  shielded:
+    driver: bridge
