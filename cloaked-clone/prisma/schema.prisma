@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  hashedPassword     String?
+  emailVerified      DateTime?
+  image              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  firstName          String?
+  lastName           String?
+  middleName         String?
+  dateOfBirth        DateTime?
+  realPhones         String[]
+  privacyScore       Int       @default(0)
+  lastScanAt         DateTime?
+  onboardingDone     Boolean   @default(false)
+  stripeCustomerId   String?
+  subscriptionId     String?
+  subscriptionStatus String?
+  planId             String?
+  trialEndsAt        DateTime?
+
+  accounts      Account[]
+  sessions      Session[]
+  addresses     UserAddress[]
+  virtualPhones VirtualPhone[]
+  emailAliases  EmailAlias[]
+  brokerRecords BrokerRecord[]
+  spamSettings  SpamSettings?
+  notifications Notification[]
+  breachAlerts  BreachAlert[]
+  scanJobs      ScanJob[]
+}
+
+model UserAddress {
+  id        String  @id @default(cuid())
+  userId    String
+  street    String?
+  city      String
+  state     String
+  zip       String?
+  country   String  @default("US")
+  isPrimary Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VirtualPhone {
+  id            String   @id @default(cuid())
+  userId        String
+  number        String   @unique
+  friendlyName  String?
+  label         String?
+  twilioSid     String?
+  isActive      Boolean  @default(true)
+  forwardTo     String?
+  callsReceived Int      @default(0)
+  smsReceived   Int      @default(0)
+  spamBlocked   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  callLogs CallLog[]
+}
+
+model EmailAlias {
+  id             String   @id @default(cuid())
+  userId         String
+  alias          String   @unique
+  label          String?
+  forwardTo      String
+  isActive       Boolean  @default(true)
+  emailsReceived Int      @default(0)
+  spamBlocked    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DataBroker {
+  id               String  @id @default(cuid())
+  name             String
+  website          String
+  logoUrl          String?
+  category         String
+  optOutUrl        String?
+  optOutMethod     String  @default("web_form")
+  optOutEmail      String?
+  scanUrlTemplate  String?
+  difficulty       String  @default("medium")
+  avgRemovalDays   Int     @default(14)
+  isActive         Boolean @default(true)
+  priority         Int     @default(5)
+
+  records BrokerRecord[]
+}
+
+model BrokerRecord {
+  id          String    @id @default(cuid())
+  userId      String
+  brokerId    String
+  status      String    @default("scanning")
+  foundUrl    String?
+  foundData   Json?
+  requestedAt DateTime?
+  removedAt   DateTime?
+  lastChecked DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broker DataBroker @relation(fields: [brokerId], references: [id])
+
+  @@unique([userId, brokerId])
+}
+
+model ScanJob {
+  id           String    @id @default(cuid())
+  userId       String
+  status       String    @default("pending")
+  totalBrokers Int       @default(0)
+  scanned      Int       @default(0)
+  found        Int       @default(0)
+  removed      Int       @default(0)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SpamSettings {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  blockUnknownCallers Boolean  @default(false)
+  blockRobocalls      Boolean  @default(true)
+  spamSensitivity     String   @default("medium")
+  whitelist           String[]
+  blacklist           String[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CallLog {
+  id             String   @id @default(cuid())
+  virtualPhoneId String
+  from           String
+  to             String
+  duration       Int?
+  status         String
+  isSpam         Boolean  @default(false)
+  spamScore      Float?
+  transcript     String?
+  createdAt      DateTime @default(now())
+
+  virtualPhone VirtualPhone @relation(fields: [virtualPhoneId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BreachAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  breachName  String
+  breachDate  DateTime?
+  dataExposed String[]
+  isRead      Boolean   @default(false)
+  sourceUrl   String?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
