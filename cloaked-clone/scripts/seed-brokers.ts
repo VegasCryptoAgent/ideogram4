@@ -6,8 +6,8 @@
  *   # or via package.json script:
  *   npm run db:seed
  *
- * The script uses Prisma `upsert` keyed on `website` so it is safe to re-run
- * at any time without creating duplicates.
+ * Uses findFirst + create/update to be idempotent without requiring a
+ * @unique constraint on DataBroker.website in the Prisma schema.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -22,53 +22,53 @@ async function main(): Promise<void> {
 
   let created = 0;
   let updated = 0;
+  let failed = 0;
 
   for (const broker of BROKERS) {
-    const result = await prisma.dataBroker.upsert({
-      where: { website: broker.website } as { website: string },
-      create: {
+    try {
+      const existing = await prisma.dataBroker.findFirst({
+        where: { website: broker.website },
+        select: { id: true },
+      });
+
+      const payload = {
         name: broker.name,
-        website: broker.website,
-        category: broker.category,
-        optOutMethod: broker.optOutMethod,
+        category: broker.category as string,
+        optOutMethod: broker.optOutMethod as string,
         optOutUrl: broker.optOutUrl ?? null,
         optOutEmail: (broker as { optOutEmail?: string }).optOutEmail ?? null,
         scanUrlTemplate: broker.scanUrlTemplate ?? null,
-        difficulty: broker.difficulty,
+        difficulty: broker.difficulty as string,
         avgRemovalDays: broker.avgRemovalDays,
         priority: broker.priority,
-        isActive: broker.isActive ?? true,
-      },
-      update: {
-        name: broker.name,
-        category: broker.category,
-        optOutMethod: broker.optOutMethod,
-        optOutUrl: broker.optOutUrl ?? null,
-        optOutEmail: (broker as { optOutEmail?: string }).optOutEmail ?? null,
-        scanUrlTemplate: broker.scanUrlTemplate ?? null,
-        difficulty: broker.difficulty,
-        avgRemovalDays: broker.avgRemovalDays,
-        priority: broker.priority,
-        isActive: broker.isActive ?? true,
-      },
-    });
+        isActive: true, // all seeded brokers are active by default
+      };
 
-    // Prisma upsert doesn't expose whether it created or updated, so we track
-    // by comparing createdAt / updatedAt.
-    const wasCreated =
-      result.createdAt.getTime() === result.updatedAt.getTime() ||
-      Date.now() - result.createdAt.getTime() < 5_000;
+      if (existing) {
+        await prisma.dataBroker.update({
+          where: { id: existing.id },
+          data: payload,
+        });
+        updated++;
+      } else {
+        await prisma.dataBroker.create({
+          data: { website: broker.website, ...payload },
+        });
+        created++;
+      }
 
-    if (wasCreated) {
-      created++;
-    } else {
-      updated++;
+      process.stdout.write('.');
+    } catch (err) {
+      console.error(`\n[Seed] Failed to seed "${broker.name}":`, err instanceof Error ? err.message : err);
+      failed++;
     }
-
-    process.stdout.write('.');
   }
 
-  console.log(`\n[Seed] Done. Created: ${created}, Updated: ${updated}`);
+  console.log(`\n[Seed] Done. Created: ${created}, Updated: ${updated}, Failed: ${failed}`);
+
+  if (failed > 0) {
+    process.exitCode = 1;
+  }
 }
 
 main()
