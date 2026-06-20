@@ -371,4 +371,5 @@ export interface BrokerSeed {
   difficulty: BrokerDifficulty;
   avgRemovalDays: number;
   priority: number;
+  isActive?: boolean;
 }

@@ -104,7 +104,7 @@ async function verifyStripe(): Promise<void> {
   }
 
   try {
-    const stripe = new Stripe(key, { apiVersion: '2024-10-28.acacia', typescript: true });
+    const stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia', typescript: true });
     await stripe.balance.retrieve();
     ok('Stripe credentials valid');
   } catch (err) {
@@ -174,21 +174,22 @@ async function seedBrokers(prisma: PrismaClient): Promise<void> {
 async function createQueues(): Promise<void> {
   section('Creating BullMQ queues');
 
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-    maxRetriesPerRequest: null,
-    lazyConnect: true,
-  });
+  const redisConnection = {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+    maxRetriesPerRequest: null as null,
+  };
 
   const QUEUE_NAMES = ['scan-queue', 'opt-out-queue', 'monitor-queue', 'notification-queue'];
 
   for (const name of QUEUE_NAMES) {
-    const q = new Queue(name, { connection: redis });
+    const q = new Queue(name, { connection: redisConnection });
     // Calling getJobCounts forces BullMQ to initialise the queue key in Redis.
     await q.getJobCounts();
+    await q.close();
     ok(`Queue "${name}" ready`);
   }
-
-  redis.disconnect();
 }
 
 // ─── 7. Start scheduler ───────────────────────────────────────────────────────

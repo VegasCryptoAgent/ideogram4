@@ -17,8 +17,7 @@
 import { Worker, Job } from 'bullmq';
 import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
-import { redis } from '../lib/redis';
-import type { NotificationJobData } from '../lib/queues';
+import { redisConnection, type NotificationJobData } from '../lib/queues';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -438,7 +437,7 @@ export const notificationWorker = new Worker<NotificationJobData>(
   QUEUE_NAME,
   processNotificationJob,
   {
-    connection: redis,
+    connection: redisConnection,
     concurrency: 10,
     limiter: {
       max: 50,

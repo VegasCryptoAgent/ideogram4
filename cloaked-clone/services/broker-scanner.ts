@@ -3,6 +3,7 @@
 // ============================================================
 import { prisma } from '@/lib/prisma';
 import { optOutQueue } from '@/lib/queues';
+import type { Prisma } from '@prisma/client';
 import { createNotification } from './notification-service';
 import type { DataBroker } from '@prisma/client';
 
@@ -130,7 +131,7 @@ export async function scanBrokerForUser(
           data: {
             status,
             foundUrl: parsed.foundUrl ?? null,
-            foundData: parsed.foundData ?? undefined,
+            foundData: (parsed.foundData ?? undefined) as Prisma.InputJsonValue | undefined,
             lastChecked: new Date(),
           },
         });
@@ -142,7 +143,7 @@ export async function scanBrokerForUser(
           brokerId: broker.id,
           status,
           foundUrl: parsed.foundUrl ?? null,
-          foundData: parsed.foundData ?? undefined,
+          foundData: (parsed.foundData ?? undefined) as Prisma.InputJsonValue | undefined,
           lastChecked: new Date(),
         },
       });

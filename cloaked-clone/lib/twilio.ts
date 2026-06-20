@@ -65,7 +65,6 @@ export async function purchasePhoneNumber(areaCode?: string): Promise<{
     voiceMethod: "POST",
     smsUrl: `${webhookBase}/api/twilio/sms`,
     smsMethod: "POST",
-    accountSid,
   });
 
   return {

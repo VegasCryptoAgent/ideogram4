@@ -15,8 +15,7 @@
 import { Worker, Job } from 'bullmq';
 import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
-import { redis } from '../lib/redis';
-import { queueNotificationJob, type OptOutJobData } from '../lib/queues';
+import { redisConnection, queueNotificationJob, type OptOutJobData } from '../lib/queues';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -244,7 +243,7 @@ async function processOptOutJob(job: Job<OptOutJobData>): Promise<void> {
 // ─── Worker instance ──────────────────────────────────────────────────────────
 
 export const optOutWorker = new Worker<OptOutJobData>(QUEUE_NAME, processOptOutJob, {
-  connection: redis,
+  connection: redisConnection,
   concurrency: 5, // multiple concurrent opt-outs are safe
   limiter: {
     max: 10,

@@ -14,8 +14,7 @@
  */
 
 import { Queue } from 'bullmq';
-import { redis } from '../lib/redis';
-import type { MonitorJobData } from '../lib/queues';
+import { redisConnection, type MonitorJobData } from '../lib/queues';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,8 +64,9 @@ const REPEATABLE_JOBS: RepeatableJobSpec[] = [
  * Safe to call multiple times (idempotent).
  */
 export async function initializeScheduler(): Promise<void> {
-  const monitorQueue = new Queue<MonitorJobData>('monitor-queue', {
-    connection: redis,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monitorQueue = new Queue<any>('monitor-queue', {
+    connection: redisConnection,
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 30_000 },
@@ -82,7 +82,7 @@ export async function initializeScheduler(): Promise<void> {
       repeat: spec.cron
         ? { pattern: spec.cron }
         : { every: spec.every! },
-      jobId: spec.name, // stable ID prevents duplicate repeatable entries
+      jobId: spec.name,
     });
 
     console.log(`[Scheduler] ✔ Registered: ${spec.label}`);
@@ -92,7 +92,7 @@ export async function initializeScheduler(): Promise<void> {
   const registered = await monitorQueue.getRepeatableJobs();
   console.log(
     `[Scheduler] ${registered.length} repeatable job(s) active:`,
-    registered.map((j) => `${j.name} (next: ${new Date(j.next).toISOString()})`),
+    registered.map((j) => `${j.name} (next: ${new Date(j.next ?? 0).toISOString()})`),
   );
 
   console.log('[Scheduler] Initialisation complete');
@@ -103,7 +103,8 @@ export async function initializeScheduler(): Promise<void> {
  * Useful for tests or when changing schedules.
  */
 export async function clearScheduler(): Promise<void> {
-  const monitorQueue = new Queue<MonitorJobData>('monitor-queue', { connection: redis });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monitorQueue = new Queue<any>('monitor-queue', { connection: redisConnection });
 
   const jobs = await monitorQueue.getRepeatableJobs();
   for (const job of jobs) {

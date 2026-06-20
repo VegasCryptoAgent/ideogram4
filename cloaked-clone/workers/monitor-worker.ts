@@ -19,7 +19,7 @@
 
 import { Worker, Job } from 'bullmq';
 import { prisma } from '../lib/prisma';
-import { redis } from '../lib/redis';
+import { redisConnection } from '../lib/queues';
 import {
   queueScanJob,
   queueOptOutJob,
@@ -302,7 +302,7 @@ async function processMonitorJob(job: Job<MonitorJobData>): Promise<void> {
 // ─── Worker instance ──────────────────────────────────────────────────────────
 
 export const monitorWorker = new Worker<MonitorJobData>(QUEUE_NAME, processMonitorJob, {
-  connection: redis,
+  connection: redisConnection,
   concurrency: 1, // monitor tasks should not run in parallel
 });
 

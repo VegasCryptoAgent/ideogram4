@@ -19,7 +19,7 @@ if (!key) {
   process.exit(1)
 }
 
-const stripe = new Stripe(key, { apiVersion: '2024-10-28.acacia', typescript: true })
+const stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia', typescript: true })
 
 const ENV_PATH = path.resolve(__dirname, '../.env')
 

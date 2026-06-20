@@ -16,8 +16,7 @@
 
 import { Worker, Job } from 'bullmq';
 import { prisma } from '../lib/prisma';
-import { redis } from '../lib/redis';
-import { queueOptOutJob, queueNotificationJob, type ScanJobData } from '../lib/queues';
+import { redisConnection, queueOptOutJob, queueNotificationJob, type ScanJobData } from '../lib/queues';
 import { calculatePrivacyScore } from '../services/privacy-score';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -236,7 +235,7 @@ async function processScanJob(job: Job<ScanJobData>): Promise<void> {
 // ─── Worker instance ──────────────────────────────────────────────────────────
 
 export const scannerWorker = new Worker<ScanJobData>(QUEUE_NAME, processScanJob, {
-  connection: redis,
+  connection: redisConnection,
   concurrency: 2,
   limiter: {
     max: 1,        // max 1 job per…
