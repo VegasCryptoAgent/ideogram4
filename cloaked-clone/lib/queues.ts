@@ -6,12 +6,19 @@
  */
 
 import { Queue } from 'bullmq';
-import { redis } from './redis';
+
+// BullMQ requires connection options, not a raw ioredis instance
+const connection = {
+  host: process.env.REDIS_HOST ?? 'localhost',
+  port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+  password: process.env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null,
+};
 
 // ─── Queue instances ──────────────────────────────────────────────────────────
 
 export const scanQueue = new Queue('scan-queue', {
-  connection: redis,
+  connection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5_000 },
@@ -21,7 +28,7 @@ export const scanQueue = new Queue('scan-queue', {
 });
 
 export const optOutQueue = new Queue('opt-out-queue', {
-  connection: redis,
+  connection,
   defaultJobOptions: {
     attempts: 5,
     backoff: { type: 'exponential', delay: 10_000 },
@@ -31,7 +38,7 @@ export const optOutQueue = new Queue('opt-out-queue', {
 });
 
 export const monitorQueue = new Queue('monitor-queue', {
-  connection: redis,
+  connection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 30_000 },
@@ -41,7 +48,7 @@ export const monitorQueue = new Queue('monitor-queue', {
 });
 
 export const notificationQueue = new Queue('notification-queue', {
-  connection: redis,
+  connection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'fixed', delay: 3_000 },

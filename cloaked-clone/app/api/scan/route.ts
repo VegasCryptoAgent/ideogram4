@@ -29,8 +29,8 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     // Check scan frequency limit
     if (user.lastScanAt) {
       const daysSinceLastScan = differenceInDays(new Date(), user.lastScanAt);
-      if (daysSinceLastScan < limits.scanFrequencyDays) {
-        const daysUntilNext = limits.scanFrequencyDays - daysSinceLastScan;
+      if (daysSinceLastScan < limits.scanIntervalDays) {
+        const daysUntilNext = limits.scanIntervalDays - daysSinceLastScan;
         return errorResponse(
           `You can run a new scan in ${daysUntilNext} day${daysUntilNext !== 1 ? 's' : ''}. Upgrade your plan for more frequent scans.`,
           429
