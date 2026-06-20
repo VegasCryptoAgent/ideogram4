@@ -13,7 +13,8 @@
     "db:seed": "tsx scripts/seed-brokers.ts",
     "worker:scanner": "tsx workers/scanner-worker.ts",
     "worker:optout": "tsx workers/opt-out-worker.ts",
-    "worker:monitor": "tsx workers/monitor-worker.ts"
+    "worker:monitor": "tsx workers/monitor-worker.ts",
+    "stripe:setup": "tsx scripts/stripe-setup.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.2",
@@ -35,6 +36,7 @@
     "@radix-ui/react-toast": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.1.3",
     "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.14.0",
     "class-variance-authority": "^0.7.1",

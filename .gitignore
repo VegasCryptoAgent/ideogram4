@@ -161,6 +161,10 @@ cython_debug/
 # Claude Code local settings
 .claude/
 
+# Allow cloaked-clone JS/TS source directories (overrides Python lib/ rule above)
+!cloaked-clone/lib/
+!cloaked-clone/lib/**
+
 # Generated sample outputs
 out.png
 output.png
