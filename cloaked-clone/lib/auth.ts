@@ -1,12 +1,12 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  // PrismaAdapter is intentionally omitted: JWT strategy + CredentialsProvider
+  // don't need it and it causes silent sign-in failures.
   session: {
     strategy: "jwt",
   },

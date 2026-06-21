@@ -22,16 +22,21 @@ export default function SignInPage() {
       return;
     }
     setLoading(true);
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (result?.error) {
-      setError("Invalid email or password.");
-    } else {
-      router.push("/dashboard");
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+      if (result?.error) {
+        setError("Invalid email or password.");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err) {
+      setError("Sign in failed: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setLoading(false);
     }
   };
 
