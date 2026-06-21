@@ -24,6 +24,7 @@ import { auth } from './lib/auth';
 const PUBLIC_API_PATHS: RegExp[] = [
   /^\/api\/auth\//,         // NextAuth sign-in / callback / session
   /^\/api\/webhooks\//,     // Stripe, Twilio, and other webhooks
+  /^\/api\/health$/,        // Railway healthcheck — must never require auth
 ];
 
 /** Rate limit: max requests per window per user. */

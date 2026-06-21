@@ -7,13 +7,27 @@
 
 import { Queue } from 'bullmq';
 
-// BullMQ requires connection options, not a raw ioredis instance
-export const redisConnection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
-  password: process.env.REDIS_PASSWORD,
-  maxRetriesPerRequest: null,
-};
+// BullMQ requires connection options, not a raw ioredis instance.
+// Parse REDIS_URL if set (Railway injects this); fall back to individual vars.
+function buildRedisConnection() {
+  const url = process.env.REDIS_URL;
+  if (url) {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname,
+      port: parseInt(parsed.port || '6379', 10),
+      password: parsed.password || undefined,
+      maxRetriesPerRequest: null as null,
+    };
+  }
+  return {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD,
+    maxRetriesPerRequest: null as null,
+  };
+}
+export const redisConnection = buildRedisConnection();
 
 // ─── Queue instances ──────────────────────────────────────────────────────────
 
