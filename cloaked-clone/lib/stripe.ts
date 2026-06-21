@@ -1,18 +1,31 @@
 import Stripe from "stripe";
 import type { Plan, PlanId } from "./types";
 
-// --------------- Stripe client singleton ---------------
+// --------------- Stripe client singleton (lazy) ---------------
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error(
-    "Missing STRIPE_SECRET_KEY. Run: cp .env.example .env and fill in your Stripe key."
-  );
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error(
+        "Missing STRIPE_SECRET_KEY environment variable."
+      );
+    }
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2025-02-24.acacia",
+      typescript: true,
+      maxNetworkRetries: 2,
+    });
+  }
+  return _stripe;
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-02-24.acacia",
-  typescript: true,
-  maxNetworkRetries: 2,
+// Keep a named export for backwards compat with webhooks route
+export const stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    return (getStripe() as unknown as Record<string | symbol, unknown>)[prop];
+  },
 });
 
 // --------------- Plan definitions ---------------
