@@ -15,6 +15,15 @@ const registerSchema = z.object({
   phone: z.string().optional(),
 });
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
@@ -28,7 +37,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     let existing;
     try {
-      existing = await prisma.user.findUnique({ where: { email } });
+      existing = await withTimeout(prisma.user.findUnique({ where: { email } }), 8000);
     } catch (dbErr) {
       console.error('[Register] DB lookup failed:', dbErr);
       const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
@@ -40,69 +49,75 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Create Stripe customer with timeout — failure is non-fatal
     let stripeCustomerId: string | undefined;
     try {
-      const customer = await stripe.customers.create({
-        email,
-        name: `${firstName} ${lastName}`,
-        metadata: { source: 'shielded-registration' },
-      });
+      const customer = await withTimeout(
+        stripe.customers.create({
+          email,
+          name: `${firstName} ${lastName}`,
+          metadata: { source: 'shielded-registration' },
+        }),
+        5000
+      );
       stripeCustomerId = customer.id;
     } catch (stripeErr) {
-      console.error('[Register] Stripe customer creation failed:', stripeErr);
+      console.error('[Register] Stripe customer creation failed (non-fatal):', stripeErr);
     }
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        hashedPassword,
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        realPhones: phone ? [phone] : [],
-        stripeCustomerId,
-        spamSettings: {
-          create: {
-            blockUnknownCallers: false,
-            blockRobocalls: true,
-            spamSensitivity: 'medium',
-            whitelist: [],
-            blacklist: [],
+    const user = await withTimeout(
+      prisma.user.create({
+        data: {
+          email,
+          hashedPassword,
+          firstName,
+          lastName,
+          name: `${firstName} ${lastName}`,
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+          realPhones: phone ? [phone] : [],
+          stripeCustomerId,
+          spamSettings: {
+            create: {
+              blockUnknownCallers: false,
+              blockRobocalls: true,
+              spamSensitivity: 'medium',
+              whitelist: [],
+              blacklist: [],
+            },
           },
         },
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        name: true,
-        dateOfBirth: true,
-        realPhones: true,
-        createdAt: true,
-        privacyScore: true,
-        onboardingDone: true,
-        stripeCustomerId: true,
-      },
-    });
-
-    try {
-      const scanJob = await prisma.scanJob.create({
-        data: {
-          userId: user.id,
-          status: 'pending',
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          dateOfBirth: true,
+          realPhones: true,
+          createdAt: true,
+          privacyScore: true,
+          onboardingDone: true,
+          stripeCustomerId: true,
         },
-      });
+      }),
+      10000
+    );
 
-      await scannerQueue.add(
-        'initial-scan',
-        { userId: user.id, scanJobId: scanJob.id },
-        { jobId: `initial-scan-${user.id}`, delay: 5000 }
-      );
-    } catch (queueErr) {
-      console.error('[Register] Failed to trigger initial scan:', queueErr);
-    }
+    // Fire-and-forget: queue initial scan without blocking the response
+    Promise.resolve().then(async () => {
+      try {
+        const scanJob = await prisma.scanJob.create({
+          data: { userId: user.id, status: 'pending' },
+        });
+        await scannerQueue.add(
+          'initial-scan',
+          { userId: user.id, scanJobId: scanJob.id },
+          { jobId: `initial-scan-${user.id}`, delay: 5000 }
+        );
+      } catch (queueErr) {
+        console.error('[Register] Failed to trigger initial scan (non-fatal):', queueErr);
+      }
+    });
 
     return createdResponse({
       user,
