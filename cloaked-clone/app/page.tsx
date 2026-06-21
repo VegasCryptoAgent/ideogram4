@@ -1,977 +1,544 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, useInView, AnimatePresence } from "framer-motion";
+import React, { useState } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Shield,
-  ShieldCheck,
   Phone,
   Mail,
   Bell,
-  AlertTriangle,
   Lock,
-  CheckCircle,
-  ChevronDown,
-  ArrowRight,
-  Star,
-  X,
-  Zap,
+  Trash2,
+  Globe,
+  CreditCard,
   Eye,
-  Database,
-  Scan,
+  Zap,
+  ChevronDown,
+  CheckCircle,
   RefreshCw,
+  Activity,
+  BarChart2,
   Menu,
-  ExternalLink,
+  X,
+  ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
 
-// Fade in animation variant
-const fadeInUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
-};
+// ── Data ──────────────────────────────────────────────────────────────────────
 
-const staggerContainer = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1 } },
-};
-
-// Animated section wrapper
-function Section({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
-  return (
-    <motion.div
-      ref={ref}
-      variants={staggerContainer}
-      initial="hidden"
-      animate={inView ? "visible" : "hidden"}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-const BROKERS = [
-  "Spokeo", "WhitePages", "BeenVerified", "Intelius", "PeopleFinder",
-  "Radaris", "MyLife", "PeopleSmart", "TruthFinder", "Instant Checkmate",
-  "ZabaSearch", "Pipl", "FastPeopleSearch", "USSearch", "PeopleLooker",
-];
-
-const FEATURES = [
+const THREATS = [
   {
-    icon: Database,
-    title: "Data Broker Removal",
-    description: "Automatically opt out from 200+ data broker sites that sell your personal information.",
-    color: "from-violet-600 to-purple-700",
+    title: "Scammers & Fraudsters",
+    desc: "They prey on your trust. Leaked data powers hyper-realistic AI voice scams and deepfakes designed to trick you out of your savings.",
   },
   {
-    icon: Phone,
-    title: "Virtual Phone Numbers",
-    description: "Get dedicated phone numbers for sign-ups. Forward calls, block spam, stay anonymous.",
-    color: "from-blue-600 to-indigo-700",
+    title: "Identity Thieves",
+    desc: "They hijack your future. Exposed SSNs and personal info let criminals drain accounts, open fake loans, and wreck your credit overnight.",
   },
   {
-    icon: Mail,
-    title: "Email Aliases",
-    description: "Create unlimited email aliases. Each sender gets a unique address — you stay protected.",
-    color: "from-emerald-600 to-teal-700",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Spam Call Blocking",
-    description: "AI-powered spam detection blocks robocalls and scam callers before they reach you.",
-    color: "from-rose-600 to-pink-700",
-  },
-  {
-    icon: AlertTriangle,
-    title: "Breach Monitoring",
-    description: "Instant alerts when your email, phone, or passwords appear in a data breach.",
-    color: "from-amber-600 to-orange-700",
-  },
-  {
-    icon: Bell,
-    title: "Real-Time Alerts",
-    description: "Push notifications the moment a data broker lists your info or a breach is detected.",
-    color: "from-cyan-600 to-sky-700",
+    title: "Data Aggregators & Brokers",
+    desc: "They profit from your safety. These companies quietly harvest your habits and sell your home address and family profile to anyone who pays.",
   },
 ];
 
 const STEPS = [
   {
-    number: "01",
+    num: "1",
+    icon: Trash2,
+    title: "Clean your past exposure",
+    desc: "We wipe your personal info from broker databases — destroying the inventory that gets sold to scammers, spammers, and bad actors.",
+  },
+  {
+    num: "2",
+    icon: Shield,
+    title: "Defend your present",
+    desc: "Aliases block spam and phishing at the source. When breaches happen, fraudsters find disconnected junk instead of your real profile.",
+  },
+  {
+    num: "3",
     icon: Lock,
-    title: "Tell Us About You",
-    description: "Securely enter your name, address history, and phone number. Your data is AES-256 encrypted and never sold — it's only used to find your listings on broker sites.",
-  },
-  {
-    number: "02",
-    icon: Scan,
-    title: "We Scan 200+ Sites",
-    description: "Our scanners immediately start searching every major data broker and people-search site. Most first scans complete within 24 hours.",
-  },
-  {
-    number: "03",
-    icon: X,
-    title: "We Remove Your Data",
-    description: "Automated opt-out requests are sent to every broker that has your data. We handle follow-ups and verify removal completion.",
-  },
-  {
-    number: "04",
-    icon: RefreshCw,
-    title: "We Monitor Weekly",
-    description: "Data brokers re-add removed listings constantly. We scan weekly and automatically re-request removal whenever you reappear.",
+    title: "Protect your future",
+    desc: "With 24/7 breach monitoring and instant alerts — plus $1M identity insurance coming soon — you'll know the moment criminals get your data.",
   },
 ];
 
-const COMPARISON = [
-  { feature: "Scan Frequency", shielded: "Weekly", cloaked: "Monthly", deleteme: "Quarterly", incogni: "Monthly" },
-  { feature: "Immediate First Scan", shielded: true, cloaked: false, deleteme: false, incogni: false },
-  { feature: "Data Brokers Covered", shielded: "200+", cloaked: "100+", deleteme: "750+", incogni: "180+" },
-  { feature: "Virtual Phone Numbers", shielded: true, cloaked: true, deleteme: false, incogni: false },
-  { feature: "Email Aliases", shielded: true, cloaked: true, deleteme: false, incogni: false },
-  { feature: "Breach Monitoring", shielded: true, cloaked: false, deleteme: false, incogni: false },
-  { feature: "Spam AI Blocking", shielded: true, cloaked: false, deleteme: false, incogni: false },
-  { feature: "Starting Price", shielded: "$4.99/mo", cloaked: "$7.99/mo", deleteme: "$10.75/mo", incogni: "$6.49/mo" },
+const FEATURES = [
+  { icon: Mail,         title: "Email & Phone Aliases",    desc: "Masked emails and numbers with dedicated inboxes — shop and sign up without ever sharing your real identity.",                           soon: false },
+  { icon: Trash2,       title: "Online Data Removal",      desc: "We remove your personal info from people-search sites and data brokers that sell it onward.",                                          soon: false },
+  { icon: Phone,        title: "Spam Call Protection",     desc: "Call Guard intercepts spammers and robocalls before your phone rings — and never blocks the calls that matter.",                       soon: true  },
+  { icon: Bell,         title: "Dark Web Alerts",          desc: "We scan the dark web around the clock and alert you the moment your info leaks to criminals.",                                        soon: false },
+  { icon: CheckCircle,  title: "$1 Million Insurance",     desc: "Up to $1M in coverage for financial losses, with 24/7 experts to restore your identity and credit.",                                   soon: true  },
+  { icon: Globe,        title: "VPN for Private Browsing", desc: "WireGuard-encrypted browsing across 50+ locations keeps your traffic and location private.",                                          soon: true  },
+  { icon: Lock,         title: "Password Management",      desc: "Stop reusing passwords. Generate and store unique passwords tied to each identity.",                                                   soon: false },
+  { icon: CreditCard,   title: "Virtual Cards",            desc: "Pay with masked cards and per-card spending limits — merchants never see your real details.",                                          soon: true  },
 ];
 
-const PLANS = [
-  {
-    name: "Starter",
-    price: "$4.99",
-    period: "/month",
-    description: "Perfect for getting started with privacy protection.",
-    badge: null,
-    features: [
-      "Monthly scans",
-      "50 data brokers",
-      "1 virtual phone number",
-      "5 email aliases",
-      "Basic breach alerts",
-      "Email support",
-    ],
-    cta: "Start Free Trial",
-    highlighted: false,
-  },
-  {
-    name: "Pro",
-    price: "$9.99",
-    period: "/month",
-    description: "Complete privacy for individuals and families.",
-    badge: "MOST POPULAR",
-    features: [
-      "Weekly scans",
-      "200+ data brokers",
-      "3 virtual phone numbers",
-      "20 email aliases",
-      "Advanced breach monitoring",
-      "Spam AI filtering",
-      "Priority support",
-      "Family sharing (2 members)",
-    ],
-    cta: "Start Free Trial",
-    highlighted: true,
-  },
-  {
-    name: "Ultimate",
-    price: "$19.99",
-    period: "/month",
-    description: "Maximum protection for power users.",
-    badge: null,
-    features: [
-      "Daily scans",
-      "200+ data brokers",
-      "Unlimited virtual phones",
-      "Unlimited email aliases",
-      "Priority removal requests",
-      "Spam AI + custom rules",
-      "Dedicated account manager",
-      "Family sharing (5 members)",
-      "API access",
-    ],
-    cta: "Start Free Trial",
-    highlighted: false,
-  },
+const ADVANTAGES = [
+  { icon: Zap,          title: "Free plan, forever",                desc: "Start with a real free tier — 1 scan and 3 aliases, no credit card. Cloaked has no free plan."                                       },
+  { icon: Eye,          title: "Pricing on the homepage",           desc: "$9.99/mo Premium, $14.99/mo Family. Right here, not hidden behind a checkout flow."                                                   },
+  { icon: Mail,         title: "Family plan available today",       desc: "Protect up to 5 people now — while Cloaked's family sharing is still \"coming soon.\""                                                },
+  { icon: CheckCircle,  title: '"Not me" one-click fix',            desc: "Wrong name or wrong state in your results? One click excludes it. No support ticket."                                                 },
+  { icon: Phone,        title: "Call blocking that respects you",   desc: "Conservative by design — off by default, never blocks unknowns blindly, one toggle to disable."                                      },
+  { icon: RefreshCw,    title: "Auto re-removal",                   desc: "Brokers re-list data within months. We re-scan automatically and file removals again."                                                },
+  { icon: Activity,     title: "Live removal feed",                 desc: "Watch removal agents work broker-by-broker in real time — proof, not promises."                                                       },
+  { icon: BarChart2,    title: "Honest status page",                desc: "A public page showing exactly which protections are live vs. simulated in beta."                                                      },
 ];
 
-const TESTIMONIALS = [
+const TRUST_CARDS = [
   {
-    name: "Sarah M.",
-    role: "Marketing Manager",
-    avatar: "SM",
-    text: "I found 63 sites with my home address and phone number. Within 3 weeks, Shielded had removed 58 of them. The spam calls dropped by 80%. This is exactly what I needed.",
-    rating: 5,
+    title: "No fake reviews",
+    desc: "We just launched, so we won't show you invented testimonials. As real users review Shield, their words will appear here — unedited.",
   },
   {
-    name: "James R.",
-    role: "Software Engineer",
-    avatar: "JR",
-    text: "As someone who cares deeply about privacy, I was shocked by how much data was out there. Shielded's dashboard makes it easy to see exactly what's been removed. The virtual numbers are a game changer.",
-    rating: 5,
+    title: "Live vs. simulated, in writing",
+    desc: "Our public status page lists exactly which protections are live and which are still simulated in beta. No other privacy app does this.",
   },
   {
-    name: "Linda K.",
-    role: "Retired Teacher",
-    avatar: "LK",
-    text: "My daughter set this up for me after I started getting scary calls from strangers who knew my address. Three months later, the calls have basically stopped. Worth every penny.",
-    rating: 5,
-  },
-  {
-    name: "David T.",
-    role: "Small Business Owner",
-    avatar: "DT",
-    text: "I use the email aliases for every service I sign up for. Now I know exactly who sold my data when I get spam. Shielded is a must-have in 2024.",
-    rating: 5,
+    title: "Watch it work",
+    desc: "Your dashboard streams removal progress broker-by-broker in real time. Judge us by what you can see, not what we claim.",
   },
 ];
 
 const FAQS = [
   {
-    question: "Is my data safe with Shielded?",
-    answer: "Absolutely. We use AES-256 encryption at rest and in transit. Your personal information is only ever used to search for your listings on data broker sites — we never sell, share, or use it for any other purpose. You can delete your data from our systems at any time.",
+    q: "How much does it cost?",
+    a: "Free plan includes 1 scan and 3 aliases — no credit card needed, no expiry. Premium is $9.99/mo and includes unlimited scans, all aliases, and call protection. Family plan is $14.99/mo for up to 5 people.",
   },
   {
-    question: "How quickly will my data be removed?",
-    answer: "Most data brokers honor removal requests within 7–14 days. Some larger brokers or those with manual processes can take up to 45 days. We track every request and follow up automatically until confirmed.",
+    q: "After my data is deleted, how long before brokers re-list it?",
+    a: "Most brokers re-list within 30–90 days from new data sources. That's why Shield re-scans automatically — we file removal requests again whenever you reappear, with no action needed from you.",
   },
   {
-    question: "What if my data reappears on a broker site?",
-    answer: "Data brokers constantly re-add listings from new data sources. That's why we scan weekly (not just once). Whenever you reappear, we automatically re-submit removal requests — no action needed from you.",
+    q: "Why do you need my phone number? Isn't that ironic?",
+    a: "We use your number as a search query — the same way someone stalking you would. Without it, we can't find your listings. Your number is encrypted, never sold, and you can delete it any time.",
   },
   {
-    question: "Can I cancel anytime?",
-    answer: "Yes. No contracts, no commitments. Cancel any time directly from your account settings. If you cancel, your protection continues until the end of your billing period.",
+    q: "What if the scan shows the wrong person or wrong state?",
+    a: "Click \"Not me\" on any result and it's excluded immediately. No support ticket, no delay. We only count listings that match you.",
   },
   {
-    question: "Why do you need my personal information to protect me?",
-    answer: "We need to know what to look for. Data brokers list people by name, address, phone, and relatives. We use your provided information as search queries to find your specific listings — the same way someone who wanted to find you would search. Without it, we'd have no way to find your data.",
+    q: "Will call blocking make me miss important calls?",
+    a: "No. Shield's call protection is conservative by design — it only screens numbers that match known spam patterns. Unknown callers ring through normally. You can disable it with one toggle.",
   },
   {
-    question: "What's the difference between Shielded and a VPN?",
-    answer: "A VPN hides your browsing traffic from your internet provider. Shielded removes information that's already been collected about you and is being actively sold. They solve different problems — many users use both together for comprehensive privacy.",
+    q: "Do these apps actually work?",
+    a: "Yes, but results vary by broker. Some remove data within 24 hours; others take 45 days. Our dashboard shows exactly which brokers have confirmed removal and which are still pending — no false promises.",
   },
 ];
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function LandingPage() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [scrolled, setScrolled] = useState(false);
-  const [brokerIndex, setBrokerIndex] = useState(0);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBrokerIndex((i) => (i + 1) % BROKERS.length);
-    }, 1500);
-    return () => clearInterval(interval);
-  }, []);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [phone, setPhone] = useState("");
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden">
-      {/* Background mesh */}
-      <div className="fixed inset-0 bg-mesh pointer-events-none" />
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-indigo-600/8 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-purple-600/8 rounded-full blur-3xl" />
+    <div className="min-h-screen overflow-x-hidden bg-[#E8E3D9]">
+
+      {/* Orange announcement banner */}
+      <div className="bg-[#F97316] text-white text-sm text-center py-2.5 px-4">
+        Shield Beta is live — free privacy scan, no credit card required.{" "}
+        <Link href="/sign-up" className="font-semibold underline underline-offset-2 hover:no-underline">
+          Get started
+        </Link>
       </div>
 
-      {/* NAVBAR */}
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? "bg-black/60 backdrop-blur-xl border-b border-white/10"
-            : "bg-transparent"
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shadow-glow">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-white">Shielded</span>
-            </Link>
+      {/* Navbar */}
+      <nav className="bg-[#E8E3D9] border-b border-[#D4CFC5] sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+          <Link href="/" className="flex items-center gap-2">
+            <Shield className="w-6 h-6 text-[#1A1A14]" fill="currentColor" />
+            <span className="text-lg font-bold text-[#1A1A14] font-serif">Shield</span>
+          </Link>
 
-            {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-8">
-              {["Features", "Pricing", "How It Works", "Blog"].map((item) => (
-                <a
-                  key={item}
-                  href={`#${item.toLowerCase().replace(/ /g, "-")}`}
-                  className="text-sm text-white/60 hover:text-white transition-colors"
-                >
-                  {item}
-                </a>
-              ))}
-            </div>
-
-            {/* CTA Buttons */}
-            <div className="hidden md:flex items-center gap-3">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
-              <Button size="sm" asChild>
-                <Link href="/sign-up">Start Free Trial</Link>
-              </Button>
-            </div>
-
-            {/* Mobile menu */}
-            <button
-              className="md:hidden p-2 text-white/70 hover:text-white"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              <Menu className="w-5 h-5" />
-            </button>
+          <div className="hidden md:flex items-center gap-8">
+            {(
+              [
+                ["#how-it-works", "How It Works"],
+                ["#features", "Features"],
+                ["#why-shield", "Why Shield"],
+                ["#faq", "FAQ"],
+              ] as [string, string][]
+            ).map(([href, label]) => (
+              <a
+                key={label}
+                href={href}
+                className="text-sm text-[#1A1A14]/60 hover:text-[#1A1A14] transition-colors"
+              >
+                {label}
+              </a>
+            ))}
           </div>
+
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/sign-in"
+              className="text-sm text-[#1A1A14]/60 hover:text-[#1A1A14] transition-colors px-3 py-2"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/sign-up"
+              className="text-sm font-semibold bg-[#1A1A14] text-white px-5 py-2.5 rounded-full hover:bg-black transition-colors"
+            >
+              Get Started
+            </Link>
+          </div>
+
+          <button
+            className="md:hidden p-2 text-[#1A1A14]"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
 
-        {/* Mobile menu dropdown */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="md:hidden bg-black/90 backdrop-blur-xl border-b border-white/10 px-4 pb-4"
-            >
-              {["Features", "Pricing", "How It Works", "Blog"].map((item) => (
-                <a
-                  key={item}
-                  href={`#${item.toLowerCase().replace(/ /g, "-")}`}
-                  className="block py-3 text-white/70 hover:text-white border-b border-white/5 last:border-0"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {item}
-                </a>
-              ))}
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" size="sm" className="flex-1" asChild>
-                  <Link href="/sign-in">Sign In</Link>
-                </Button>
-                <Button size="sm" className="flex-1" asChild>
-                  <Link href="/sign-up">Start Free</Link>
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {mobileOpen && (
+          <div className="md:hidden bg-[#E8E3D9] border-t border-[#D4CFC5] px-4 pb-4">
+            {(
+              [
+                ["#how-it-works", "How It Works"],
+                ["#features", "Features"],
+                ["#why-shield", "Why Shield"],
+                ["#faq", "FAQ"],
+              ] as [string, string][]
+            ).map(([href, label]) => (
+              <a
+                key={label}
+                href={href}
+                className="block py-3 text-[#1A1A14]/70 border-b border-[#D4CFC5] last:border-0 text-sm"
+                onClick={() => setMobileOpen(false)}
+              >
+                {label}
+              </a>
+            ))}
+            <div className="flex gap-3 pt-4">
+              <Link
+                href="/sign-in"
+                className="flex-1 text-center py-2.5 border border-[#1A1A14] rounded-full text-sm font-medium text-[#1A1A14]"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/sign-up"
+                className="flex-1 text-center py-2.5 bg-[#1A1A14] text-white rounded-full text-sm font-semibold"
+              >
+                Get Started
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* HERO SECTION */}
-      <section className="relative pt-32 pb-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left: Text */}
-            <div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <Badge className="mb-6 px-4 py-1.5 text-xs">
-                  <span className="w-2 h-2 rounded-full bg-green-400 mr-2 inline-block animate-pulse" />
-                  14-Day Free Trial — No Credit Card Required
-                </Badge>
-              </motion.div>
+      {/* Hero */}
+      <section className="bg-[#E8E3D9] py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
+          {/* Left */}
+          <div className="pt-2">
+            <h1 className="text-5xl sm:text-6xl font-bold leading-tight text-[#1A1A14] mb-6 font-serif">
+              Fight back against surveillance, spam, &{" "}
+              <em className="text-[#F97316] not-italic">identity theft.</em>
+            </h1>
 
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-                className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tight"
-              >
-                Your Personal Data Is Being{" "}
-                <span className="gradient-text">Sold Right Now</span>
-              </motion.h1>
+            <p className="text-[#1A1A14]/70 text-lg mb-6 leading-relaxed">
+              You can't fight what you can't see. Scan your number to find out who's selling your
+              data — free, in under a minute.
+            </p>
 
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="mt-6 text-lg text-white/60 leading-relaxed max-w-xl"
-              >
-                Shielded finds and removes your information from{" "}
-                <strong className="text-white">200+ data broker sites</strong>, gives you
-                virtual phone numbers, and stops spam — automatically.
-              </motion.p>
+            <ul className="space-y-3 mb-8">
+              {[
+                "Encrypted connections — your scan results stay yours",
+                "We never store or sell your sensitive personal information",
+                "Transparent pricing: free plan, Premium $9.99/mo",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-sm text-[#1A1A14]/80">
+                  <CheckCircle className="w-4 h-4 text-[#F97316] flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="mt-8 flex flex-col sm:flex-row gap-4"
-              >
-                <Button size="lg" className="text-base shadow-glow-lg" asChild>
-                  <Link href="/sign-up">
-                    Remove My Data Now
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <a href="#how-it-works">See How It Works</a>
-                </Button>
-              </motion.div>
+            <p className="text-sm text-[#1A1A14]/40">
+              Thousands have already taken their free scan to uncover their risk.
+            </p>
+          </div>
 
-              {/* Trust badges */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.5 }}
-                className="mt-10 flex flex-wrap gap-4"
-              >
-                {[
-                  { icon: Database, text: "200+ Brokers Monitored" },
-                  { icon: RefreshCw, text: "Weekly Scans" },
-                  { icon: Bell, text: "Instant Alerts" },
-                  { icon: ShieldCheck, text: "14-Day Free Trial" },
-                ].map(({ icon: Icon, text }) => (
-                  <div
-                    key={text}
-                    className="flex items-center gap-2 text-sm text-white/50"
-                  >
-                    <Icon className="w-4 h-4 text-violet-400" />
-                    {text}
-                  </div>
-                ))}
-              </motion.div>
+          {/* Right — Scan card */}
+          <div className="bg-white rounded-2xl p-6 shadow-[0_4px_32px_rgba(0,0,0,0.08)] border border-[#E5E0D5]">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-[#FDEEDE] flex items-center justify-center flex-shrink-0">
+                <Phone className="w-5 h-5 text-[#F97316]" />
+              </div>
+              <div>
+                <div className="font-semibold text-[#1A1A14] text-sm">Free Privacy Scan</div>
+                <div className="text-xs text-[#1A1A14]/50">See who's selling your data</div>
+              </div>
             </div>
 
-            {/* Right: Shield Graphic */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative flex items-center justify-center"
+            <input
+              type="tel"
+              placeholder="(555) 123-4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full border border-[#E5E0D5] rounded-xl px-4 py-3.5 text-[#1A1A14] placeholder-[#1A1A14]/30 outline-none focus:border-[#1A1A14] transition-colors mb-3 text-base bg-white"
+            />
+
+            <Link
+              href={`/sign-up${phone ? `?phone=${encodeURIComponent(phone)}` : ""}`}
+              className="flex items-center justify-center gap-2 w-full bg-[#1A1A14] text-white py-3.5 rounded-xl font-semibold hover:bg-black transition-colors mb-4 text-sm"
             >
-              {/* Orbiting dots */}
-              <div className="relative w-80 h-80">
-                {/* Outer orbit ring */}
-                <div className="absolute inset-0 rounded-full border border-white/5" />
-                <div className="absolute inset-8 rounded-full border border-white/5" />
+              Scan Now <ArrowRight className="w-4 h-4" />
+            </Link>
 
-                {/* Orbiting broker names */}
-                {[0, 60, 120, 180, 240, 300].map((deg, i) => (
-                  <motion.div
-                    key={i}
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      transform: `rotate(${deg}deg) translateX(140px) rotate(-${deg}deg)`,
-                    }}
-                    animate={{ rotate: [0, 360] }}
-                    transition={{
-                      duration: 20 + i * 2,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-xl glass-card flex items-center justify-center text-xs font-medium text-white/40 shadow-lg"
-                      style={{ transform: `rotate(${deg}deg)` }}
-                    >
-                      {["SP", "WP", "BV", "IN", "TF", "RA"][i]}
-                    </div>
-                  </motion.div>
-                ))}
-
-                {/* Center Shield */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <motion.div
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                    className="relative"
-                  >
-                    <div className="w-32 h-32 bg-violet-600/20 rounded-full blur-2xl absolute inset-0 m-auto" />
-                    <div className="relative w-24 h-24 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-glow-lg">
-                      <ShieldCheck className="w-12 h-12 text-white" />
-                    </div>
-                  </motion.div>
-                </div>
+            <div className="bg-[#EEF2FF] rounded-xl p-4 mb-4">
+              <div className="text-xs font-semibold text-[#1A1A14] mb-1">Why we ask for your number</div>
+              <div className="text-xs text-[#1A1A14]/60 leading-relaxed">
+                One-time verification only — to confirm you own the number being scanned. We don't
+                sell your data or sign you up for marketing lists.
               </div>
+            </div>
 
-              {/* Floating stats */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 }}
-                className="absolute top-4 right-0 glass-card rounded-xl px-4 py-3 text-sm"
-              >
-                <div className="text-white/40 text-xs mb-1">Last scan found</div>
-                <div className="text-white font-bold">47 listings</div>
-                <div className="text-green-400 text-xs">→ All removed</div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 1 }}
-                className="absolute bottom-8 left-0 glass-card rounded-xl px-4 py-3 text-sm"
-              >
-                <div className="text-white/40 text-xs mb-1">Scanning</div>
-                <div className="text-white font-bold text-sm">
-                  {BROKERS[brokerIndex]}
-                </div>
-                <div className="flex gap-0.5 mt-1.5">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-1 w-4 rounded-full bg-violet-600 animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
+            <p className="text-xs text-center text-[#1A1A14]/40">
+              No credit card required. Scan on demand — not once a month.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* PROBLEM SECTION */}
-      <section id="features" className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="secondary" className="mb-4">The Problem</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Why Your Data Is{" "}
-                <span className="gradient-text">Everywhere</span>
-              </h2>
-              <p className="mt-4 text-white/50">
-                Data brokers collect your information from public records, social media, purchase history, and more — then sell it to anyone willing to pay.
-              </p>
-            </motion.div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-16">
-              {[
-                { value: "47", label: "Average listings found per person", color: "text-red-400" },
-                { value: "30", label: "Days until brokers re-add removed data", color: "text-amber-400" },
-                { value: "6.4B", label: "Records breached in 2024 alone", color: "text-rose-400" },
-              ].map(({ value, label, color }) => (
-                <motion.div
-                  key={value}
-                  variants={fadeInUp}
-                  className="glass-card rounded-2xl p-8 text-center"
-                >
-                  <div className={`text-5xl font-black mb-3 ${color}`}>{value}</div>
-                  <div className="text-white/50 text-sm">{label}</div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Broker logos */}
-            <motion.div variants={fadeInUp} className="text-center">
-              <p className="text-white/30 text-sm mb-6 uppercase tracking-widest">Sites selling your data right now</p>
-              <div className="flex flex-wrap justify-center gap-3">
-                {BROKERS.map((broker) => (
-                  <div
-                    key={broker}
-                    className="glass-card rounded-lg px-4 py-2 text-sm text-white/40 border border-red-500/10 bg-red-500/5"
-                  >
-                    {broker}
-                  </div>
-                ))}
-                <div className="glass-card rounded-lg px-4 py-2 text-sm text-white/30">
-                  +185 more
-                </div>
-              </div>
-            </motion.div>
-          </Section>
-        </div>
-      </section>
-
-      {/* HOW IT WORKS */}
-      <section id="how-it-works" className="py-24 px-4 sm:px-6 lg:px-8 bg-white/2">
-        <div className="max-w-7xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="secondary" className="mb-4">How It Works</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Protection that runs{" "}
-                <span className="gradient-text">on autopilot</span>
-              </h2>
-              <p className="mt-4 text-white/50">
-                Set it up in 5 minutes. We handle everything from there.
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {STEPS.map(({ number, icon: Icon, title, description }, i) => (
-                <motion.div
-                  key={number}
-                  variants={fadeInUp}
-                  className="relative"
-                >
-                  {i < STEPS.length - 1 && (
-                    <div className="hidden lg:block absolute top-10 left-full w-full h-px bg-gradient-to-r from-violet-600/30 to-transparent z-0" />
-                  )}
-                  <div className="glass-card rounded-2xl p-6 relative z-10 h-full border-violet-500/10">
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className="text-4xl font-black text-violet-600/20">{number}</span>
-                      <div className="w-10 h-10 bg-violet-600/20 rounded-xl flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-violet-400" />
-                      </div>
-                    </div>
-                    <h3 className="text-lg font-semibold mb-2">{title}</h3>
-                    <p className="text-white/50 text-sm leading-relaxed">{description}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </Section>
-        </div>
-      </section>
-
-      {/* FEATURES GRID */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="secondary" className="mb-4">Features</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Everything you need to{" "}
-                <span className="gradient-text">take back control</span>
-              </h2>
-            </motion.div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {FEATURES.map(({ icon: Icon, title, description, color }) => (
-                <motion.div
-                  key={title}
-                  variants={fadeInUp}
-                  className="glass-card rounded-2xl p-6 hover:bg-white/8 transition-all duration-300 group"
-                >
-                  <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{title}</h3>
-                  <p className="text-white/50 text-sm leading-relaxed">{description}</p>
-                </motion.div>
-              ))}
-            </div>
-          </Section>
-        </div>
-      </section>
-
-      {/* COMPARISON TABLE */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white/2">
-        <div className="max-w-5xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-12">
-              <Badge variant="secondary" className="mb-4">Comparison</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Why choose{" "}
-                <span className="gradient-text">Shielded</span>?
-              </h2>
-            </motion.div>
-
-            <motion.div variants={fadeInUp} className="glass-card rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left p-4 text-white/50 text-sm font-medium">Feature</th>
-                      <th className="p-4 text-center">
-                        <div className="inline-flex items-center gap-1.5 bg-violet-600 text-white text-sm font-bold px-3 py-1.5 rounded-lg">
-                          <Shield className="w-3.5 h-3.5" /> Shielded
-                        </div>
-                      </th>
-                      <th className="p-4 text-center text-white/40 text-sm">Cloaked</th>
-                      <th className="p-4 text-center text-white/40 text-sm">DeleteMe</th>
-                      <th className="p-4 text-center text-white/40 text-sm">Incogni</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {COMPARISON.map(({ feature, shielded, cloaked, deleteme, incogni }, i) => (
-                      <tr
-                        key={feature}
-                        className={`border-b border-white/5 last:border-0 ${i % 2 === 0 ? "bg-white/2" : ""}`}
-                      >
-                        <td className="p-4 text-sm text-white/70">{feature}</td>
-                        {[
-                          { val: shielded, highlight: true },
-                          { val: cloaked, highlight: false },
-                          { val: deleteme, highlight: false },
-                          { val: incogni, highlight: false },
-                        ].map(({ val, highlight }, j) => (
-                          <td key={j} className="p-4 text-center">
-                            {typeof val === "boolean" ? (
-                              val ? (
-                                <CheckCircle className={`w-5 h-5 mx-auto ${highlight ? "text-green-400" : "text-green-600/50"}`} />
-                              ) : (
-                                <X className="w-5 h-5 mx-auto text-red-500/50" />
-                              )
-                            ) : (
-                              <span className={`text-sm font-medium ${highlight ? "text-violet-300" : "text-white/40"}`}>
-                                {val}
-                              </span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </motion.div>
-          </Section>
-        </div>
-      </section>
-
-      {/* PRICING */}
-      <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8">
+      {/* Dark: Threat section */}
+      <section className="bg-[#141410] py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="secondary" className="mb-4">Pricing</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Simple, transparent{" "}
-                <span className="gradient-text">pricing</span>
-              </h2>
-              <p className="mt-4 text-white/50">
-                Start with a 14-day free trial. No credit card required.
-              </p>
-            </motion.div>
+          <h2 className="text-4xl sm:text-5xl font-bold text-white text-center mb-4 font-serif">
+            You can't fight what you can't see.
+          </h2>
+          <p className="text-white/50 text-center mb-14 max-w-2xl mx-auto leading-relaxed">
+            Invisible actors are trading your secrets, tracking your location, and targeting your
+            finances. It's not just a privacy breach — it's a threat to your family's safety.
+          </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {PLANS.map(({ name, price, period, description, badge, features, cta, highlighted }) => (
-                <motion.div
-                  key={name}
-                  variants={fadeInUp}
-                  className={`relative rounded-2xl p-6 flex flex-col ${
-                    highlighted
-                      ? "bg-violet-600/20 border border-violet-500/50 shadow-glow-lg"
-                      : "glass-card border-white/10"
-                  }`}
-                >
-                  {badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-violet-600 text-white border-0 px-4 py-1">
-                        {badge}
-                      </Badge>
-                    </div>
-                  )}
-                  <div className="mb-6">
-                    <h3 className="text-lg font-bold mb-1">{name}</h3>
-                    <p className="text-white/40 text-sm mb-4">{description}</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-black">{price}</span>
-                      <span className="text-white/40 text-sm">{period}</span>
-                    </div>
-                  </div>
-                  <ul className="space-y-3 mb-8 flex-1">
-                    {features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-3 text-sm text-white/70">
-                        <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant={highlighted ? "default" : "outline"}
-                    className="w-full"
-                    asChild
-                  >
-                    <Link href="/sign-up">{cta}</Link>
-                  </Button>
-                </motion.div>
-              ))}
-            </div>
-          </Section>
-        </div>
-      </section>
-
-      {/* TESTIMONIALS */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white/2">
-        <div className="max-w-6xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="secondary" className="mb-4">Testimonials</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Trusted by{" "}
-                <span className="gradient-text">privacy-conscious people</span>
-              </h2>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {TESTIMONIALS.map(({ name, role, avatar, text, rating }) => (
-                <motion.div
-                  key={name}
-                  variants={fadeInUp}
-                  className="glass-card rounded-2xl p-6"
-                >
-                  <div className="flex gap-0.5 mb-4">
-                    {[...Array(rating)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                  <p className="text-white/70 text-sm leading-relaxed mb-6">"{text}"</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-violet-600/30 rounded-full flex items-center justify-center text-sm font-bold text-violet-300">
-                      {avatar}
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold">{name}</div>
-                      <div className="text-xs text-white/40">{role}</div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </Section>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto">
-          <Section>
-            <motion.div variants={fadeInUp} className="text-center mb-16">
-              <Badge variant="secondary" className="mb-4">FAQ</Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold">
-                Common{" "}
-                <span className="gradient-text">questions</span>
-              </h2>
-            </motion.div>
-
-            <div className="space-y-3">
-              {FAQS.map(({ question, answer }, i) => (
-                <motion.div key={i} variants={fadeInUp}>
-                  <button
-                    className="w-full glass-card rounded-xl p-5 text-left flex items-start justify-between gap-4 hover:bg-white/8 transition-colors"
-                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  >
-                    <span className="font-medium text-sm sm:text-base">{question}</span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-white/40 flex-shrink-0 transition-transform ${
-                        openFaq === i ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  <AnimatePresence>
-                    {openFaq === i && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-5 pb-5 pt-2 text-white/50 text-sm leading-relaxed">
-                          {answer}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              ))}
-            </div>
-          </Section>
-        </div>
-      </section>
-
-      {/* CTA BANNER */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <Section>
-            <motion.div
-              variants={fadeInUp}
-              className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-violet-900/80 to-indigo-900/80 border border-violet-500/30 p-12 text-center shield-glow"
-            >
-              <div className="absolute inset-0 bg-mesh opacity-30" />
-              <div className="relative z-10">
-                <ShieldCheck className="w-16 h-16 text-violet-400 mx-auto mb-6" />
-                <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                  Start protecting your privacy today
-                </h2>
-                <p className="text-white/60 mb-8 max-w-xl mx-auto">
-                  Join thousands who have already removed their data from hundreds of broker sites. 14-day free trial, no credit card needed.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button size="xl" className="shadow-glow-lg" asChild>
-                    <Link href="/sign-up">
-                      Remove My Data Now
-                      <ArrowRight className="ml-2 w-5 h-5" />
-                    </Link>
-                  </Button>
-                  <Button size="xl" variant="outline" asChild>
-                    <Link href="/sign-in">Already have an account?</Link>
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </Section>
-        </div>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="border-t border-white/10 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
-            <div className="col-span-2">
-              <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-lg font-bold">Shielded</span>
-              </Link>
-              <p className="text-white/40 text-sm leading-relaxed max-w-xs">
-                The most comprehensive privacy protection platform. Remove your data, stay anonymous.
-              </p>
-              <div className="flex gap-3 mt-6">
-                {["Tw", "Li", "Gh", "Yt"].map((social) => (
-                  <button
-                    key={social}
-                    className="w-8 h-8 glass-card rounded-lg flex items-center justify-center text-xs text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    {social}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {[
-              {
-                heading: "Product",
-                links: ["Features", "Pricing", "How It Works", "Changelog"],
-              },
-              {
-                heading: "Company",
-                links: ["About", "Blog", "Careers", "Press"],
-              },
-              {
-                heading: "Legal",
-                links: ["Privacy Policy", "Terms of Service", "Cookie Policy", "CCPA"],
-              },
-            ].map(({ heading, links }) => (
-              <div key={heading}>
-                <h4 className="text-sm font-semibold mb-4 text-white/70">{heading}</h4>
-                <ul className="space-y-2">
-                  {links.map((link) => (
-                    <li key={link}>
-                      <a href="#" className="text-sm text-white/40 hover:text-white/70 transition-colors">
-                        {link}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {THREATS.map(({ title, desc }) => (
+              <div key={title} className="bg-[#1E1E1A] border border-[#2C2C26] rounded-2xl p-6">
+                <h3 className="text-[#F97316] font-semibold mb-3">{title}</h3>
+                <p className="text-white/55 text-sm leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
-          <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-white/30">
-              © 2024 Shielded Privacy Inc. All rights reserved.
-            </p>
-            <p className="text-sm text-white/30">
-              Made with privacy in mind. We never sell your data.
-            </p>
+
+          <p className="text-white/25 text-center mt-10 text-sm">
+            The problem is real, widespread, and personal.
+          </p>
+        </div>
+      </section>
+
+      {/* Light: How it works */}
+      <section id="how-it-works" className="bg-[#E8E3D9] py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl sm:text-5xl font-bold text-[#1A1A14] mb-4 font-serif">
+            Shield lets you take back control.
+          </h2>
+          <p className="text-[#1A1A14]/60 mb-14 max-w-2xl leading-relaxed">
+            Every day, data brokers buy and sell your email, phone number, and address — fueling
+            spam calls, phishing, and identity theft. Shield removes the supply.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {STEPS.map(({ num, icon: Icon, title, desc }) => (
+              <div key={title} className="bg-white border border-[#E5E0D5] rounded-2xl p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <div className="w-10 h-10 rounded-full bg-[#E8EDFF] flex items-center justify-center">
+                    <Icon className="w-5 h-5 text-[#4F6AF5]" />
+                  </div>
+                  <span className="text-5xl font-black text-[#1A1A14]/8 leading-none">{num}</span>
+                </div>
+                <h3 className="font-bold text-[#1A1A14] mb-2">{title}</h3>
+                <p className="text-[#1A1A14]/60 text-sm leading-relaxed">{desc}</p>
+              </div>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* Light: Features */}
+      <section id="features" className="bg-[#E8E3D9] pb-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl font-bold text-[#1A1A14] mb-12 font-serif">
+            How does Shield protect my data?
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {FEATURES.map(({ icon: Icon, title, desc, soon }) => (
+              <div key={title} className="bg-white border border-[#E5E0D5] rounded-2xl p-5">
+                <div className="w-10 h-10 rounded-full bg-[#FDEEDE] flex items-center justify-center mb-4">
+                  <Icon className="w-5 h-5 text-[#F97316]" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h3 className="font-bold text-[#1A1A14] text-sm">{title}</h3>
+                  {soon && (
+                    <span className="text-xs bg-[#FDEEDE] text-[#F97316] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
+                      COMING SOON
+                    </span>
+                  )}
+                </div>
+                <p className="text-[#1A1A14]/55 text-xs leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Dark: Only in Shield */}
+      <section id="why-shield" className="bg-[#141410] py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="inline-flex items-center gap-2 bg-[#F97316] text-white text-sm font-semibold px-4 py-2 rounded-full mb-8">
+            <Zap className="w-4 h-4" />
+            Only in Shield
+          </div>
+
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4 max-w-3xl font-serif">
+            Everything Cloaked has.{" "}
+            <em className="text-[#F97316]">Plus everything it doesn't.</em>
+          </h2>
+          <p className="text-white/50 mb-14 max-w-xl leading-relaxed">
+            Same protection. Then we kept going — fixing the things real users complain about most.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {ADVANTAGES.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="bg-[#1E1E1A] border border-[#2C2C26] rounded-2xl p-5">
+                <Icon className="w-5 h-5 text-[#F97316] mb-4" />
+                <h3 className="font-bold text-white text-sm mb-2">{title}</h3>
+                <p className="text-white/50 text-xs leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Light: Built in the open */}
+      <section className="bg-[#E8E3D9] py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl sm:text-5xl font-bold text-[#1A1A14] text-center mb-4 font-serif">
+            Built in the open.
+          </h2>
+          <p className="text-[#1A1A14]/60 text-center mb-14 max-w-2xl mx-auto leading-relaxed">
+            Privacy apps run on trust, and trust isn't earned with marketing. Here's our deal with you.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {TRUST_CARDS.map(({ title, desc }) => (
+              <div key={title} className="bg-white border border-[#E5E0D5] rounded-2xl p-6">
+                <CheckCircle className="w-6 h-6 text-[#F97316] mb-4" />
+                <h3 className="font-bold text-[#1A1A14] mb-2">{title}</h3>
+                <p className="text-[#1A1A14]/60 text-sm leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Light: FAQ */}
+      <section id="faq" className="bg-[#EDEAE0] py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-4xl sm:text-5xl font-bold text-[#1A1A14] text-center mb-4 font-serif">
+            Questions people actually ask
+          </h2>
+          <p className="text-[#1A1A14]/50 text-center mb-12">
+            Straight answers — including the uncomfortable ones.
+          </p>
+
+          <div className="space-y-3">
+            {FAQS.map(({ q, a }, i) => (
+              <div key={i} className="bg-white border border-[#E5E0D5] rounded-xl overflow-hidden">
+                <button
+                  className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-[#FAFAF8] transition-colors"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
+                  <span className="font-medium text-[#1A1A14] text-sm sm:text-base pr-4">{q}</span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-[#1A1A14]/40 flex-shrink-0 transition-transform duration-200 ${
+                      openFaq === i ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                <AnimatePresence initial={false}>
+                  {openFaq === i && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <p className="px-6 pb-5 text-[#1A1A14]/60 text-sm leading-relaxed">{a}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Dark: CTA */}
+      <section className="bg-[#141410] py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 font-serif">
+            Your info shouldn't be currency for scammers.
+          </h2>
+          <p className="text-white/50 mb-10 leading-relaxed">
+            Shield stands with you in the fight against privacy exploiters — and gives you the tools
+            to win.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center justify-center gap-2 bg-[#F97316] text-white font-semibold px-8 py-4 rounded-full hover:bg-[#EA6B0F] transition-colors"
+            >
+              Start Free <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="#features"
+              className="inline-flex items-center justify-center bg-transparent text-white font-semibold px-8 py-4 rounded-full border border-white/25 hover:border-white/50 transition-colors"
+            >
+              View Pricing
+            </Link>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-white/30 text-sm">
+            {["Encrypted connections", "Never stores your sensitive info", "Never sells your data"].map(
+              (t) => (
+                <span key={t}>{t}</span>
+              )
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-[#141410] border-t border-white/8 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          <Link href="/" className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-white" fill="currentColor" />
+            <span className="text-white font-bold font-serif">Shield</span>
+          </Link>
+
+          <div className="flex flex-wrap items-center justify-center gap-6">
+            {["Pricing", "Why Shield", "Status", "Privacy Policy", "Terms"].map((link) => (
+              <a
+                key={link}
+                href="#"
+                className="text-sm text-white/35 hover:text-white/65 transition-colors"
+              >
+                {link}
+              </a>
+            ))}
+          </div>
+
+          <p className="text-sm text-white/30">© 2026 Shield Privacy</p>
         </div>
       </footer>
     </div>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -9,51 +9,51 @@ const inter = Inter({
   display: "swap",
 });
 
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  display: "swap",
+  style: ["normal", "italic"],
+});
+
 export const metadata: Metadata = {
-  title: "Shielded - Ultimate Privacy Protection",
+  title: "Shield - Fight Back Against Surveillance, Spam & Identity Theft",
   description:
-    "Shielded automatically removes your personal data from 200+ data broker sites, provides virtual phone numbers, email aliases, and stops spam — protecting your privacy 24/7.",
+    "Shield finds and removes your personal data from 200+ data broker sites, gives you virtual phone numbers and email aliases, and stops spam — automatically.",
   keywords: [
     "privacy protection",
     "data broker removal",
     "virtual phone numbers",
     "email aliases",
     "spam blocking",
+    "identity theft protection",
     "data removal",
-    "personal data protection",
-    "identity protection",
   ],
-  authors: [{ name: "Shielded Privacy" }],
-  creator: "Shielded Privacy",
+  authors: [{ name: "Shield Privacy" }],
+  creator: "Shield Privacy",
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://shielded.app",
-    title: "Shielded - Ultimate Privacy Protection",
+    title: "Shield - Fight Back Against Surveillance, Spam & Identity Theft",
     description:
-      "Remove your data from 200+ data brokers automatically. Virtual numbers, email aliases, spam blocking.",
-    siteName: "Shielded",
+      "Remove your data from 200+ data brokers automatically. Virtual numbers, email aliases, breach alerts.",
+    siteName: "Shield",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Shielded - Ultimate Privacy Protection",
+    title: "Shield - Privacy Protection",
     description: "Remove your data from 200+ data brokers automatically.",
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  themeColor: "#7C3AED",
+  robots: { index: true, follow: true },
+  themeColor: "#F97316",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans antialiased`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+      <body className="font-sans antialiased">
         {children}
         <Toaster />
       </body>
