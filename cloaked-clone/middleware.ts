@@ -84,7 +84,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     const session = await auth();
 
     if (!session?.user?.id) {
-      const loginUrl = new URL('/login', req.url);
+      const loginUrl = new URL('/sign-in', req.url);
       loginUrl.searchParams.set('callbackUrl', req.url);
       return NextResponse.redirect(loginUrl);
     }
