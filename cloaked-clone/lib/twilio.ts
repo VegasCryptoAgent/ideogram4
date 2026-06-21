@@ -1,18 +1,30 @@
 import twilio from "twilio";
 import type Twilio from "twilio/lib/rest/Twilio";
 
-// --------------- Twilio client singleton ---------------
+// --------------- Twilio client singleton (lazy) ---------------
 
-if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-  throw new Error(
-    "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables must be set"
-  );
+let _twilioClient: Twilio | null = null;
+
+export function getTwilioClient(): Twilio {
+  if (!_twilioClient) {
+    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      throw new Error(
+        "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables must be set"
+      );
+    }
+    _twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+  }
+  return _twilioClient;
 }
 
-export const twilioClient: Twilio = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+export const twilioClient = new Proxy({} as Twilio, {
+  get(_target, prop) {
+    return (getTwilioClient() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
 
 export const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER ?? "";
 
