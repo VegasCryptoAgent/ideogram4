@@ -43,9 +43,9 @@ async function getPlanIdFromSubscription(
   const priceId = subscription.items.data[0]?.price.id;
   if (!priceId) return null;
 
-  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return 'starter';
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return 'pro';
-  if (priceId === process.env.STRIPE_ULTIMATE_PRICE_ID) return 'ultimate';
+  if (priceId === process.env.STRIPE_PRICE_STARTER) return 'starter';
+  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro';
+  if (priceId === process.env.STRIPE_PRICE_ULTIMATE) return 'ultimate';
 
   return null;
 }
