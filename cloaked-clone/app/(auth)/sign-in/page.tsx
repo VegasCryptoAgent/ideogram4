@@ -1,43 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import { Eye, EyeOff, Mail, Lock, Shield } from "lucide-react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { signInAction } from "@/app/actions/auth";
 
 export default function SignInPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
       setError("Please fill in all fields.");
       return;
     }
-    setLoading(true);
-    try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (result?.error) {
-        setError("Invalid email or password.");
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      setError("Sign in failed: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setLoading(false);
-    }
+    startTransition(async () => {
+      const result = await signInAction(email, password);
+      if (result?.error) setError(result.error);
+    });
   };
 
   return (
@@ -104,10 +89,10 @@ export default function SignInPage() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={isPending}
           className="w-full bg-[#1A1A14] text-white py-3 rounded-xl font-semibold hover:bg-black transition-colors disabled:opacity-50 text-sm mt-2"
         >
-          {loading ? (
+          {isPending ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Signing in...
@@ -127,7 +112,7 @@ export default function SignInPage() {
         </div>
 
         <p className="text-center text-sm text-[#1A1A14]/50">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/sign-up" className="text-[#F97316] font-medium hover:underline">
             Start free
           </Link>
