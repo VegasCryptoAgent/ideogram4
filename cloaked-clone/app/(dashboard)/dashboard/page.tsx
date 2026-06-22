@@ -3,7 +3,21 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Database, CheckCircle, Clock, Shield, AlertTriangle, Scan, Phone, Mail, ArrowRight, TrendingUp,
+  Database,
+  CheckCircle,
+  Clock,
+  Shield,
+  AlertTriangle,
+  Scan,
+  Phone,
+  Mail,
+  ArrowRight,
+  TrendingUp,
+  Plus,
+  Eye,
+  EyeOff,
+  Zap,
+  Lock,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Link from "next/link";
@@ -20,17 +34,23 @@ const REMOVAL_DATA = [
 ];
 
 const RECENT_ACTIVITY = [
-  { id: 1, type: "removed", broker: "Spokeo",             time: "2 minutes ago"  },
-  { id: 2, type: "removed", broker: "WhitePages",         time: "15 minutes ago" },
-  { id: 3, type: "found",   broker: "FastPeopleSearch",   time: "1 hour ago"     },
-  { id: 4, type: "removed", broker: "BeenVerified",       time: "3 hours ago"    },
-  { id: 5, type: "breach",  broker: "LinkedIn Data Breach", time: "Yesterday"    },
+  { id: 1, type: "removed", broker: "Spokeo",               time: "2 minutes ago"  },
+  { id: 2, type: "removed", broker: "WhitePages",           time: "15 minutes ago" },
+  { id: 3, type: "found",   broker: "FastPeopleSearch",     time: "1 hour ago"     },
+  { id: 4, type: "removed", broker: "BeenVerified",         time: "3 hours ago"    },
+  { id: 5, type: "breach",  broker: "LinkedIn Data Breach", time: "Yesterday"      },
+];
+
+const IDENTITIES = [
+  { label: "Shopping alias",    email: "shop.j4k2@shield.email",  phone: "+1 (555) 821-4422", active: true,  emailCount: 24, callCount: 0  },
+  { label: "Newsletter alias",  email: "news.9xm1@shield.email",  phone: null,                active: true,  emailCount: 87, callCount: 0  },
+  { label: "Work contacts",     email: "work.3pt7@shield.email",  phone: "+1 (555) 307-8891", active: true,  emailCount: 12, callCount: 5  },
 ];
 
 const QUICK_ACTIONS = [
-  { icon: Scan, label: "Run Scan Now",       description: "Scan 200+ brokers",      href: "/scanner" },
-  { icon: Phone, label: "Add Virtual Number", description: "Get a new phone number", href: "/phone"   },
-  { icon: Mail,  label: "Create Email Alias", description: "Add an email alias",     href: "/email"   },
+  { icon: Scan,  label: "Run Scan Now",        description: "Scan 400+ brokers",       href: "/scanner" },
+  { icon: Phone, label: "Add Virtual Number",  description: "Get a masked phone",       href: "/phone"   },
+  { icon: Mail,  label: "Create Email Alias",  description: "Add a new identity",       href: "/email"   },
 ];
 
 const activityStyle = {
@@ -41,6 +61,7 @@ const activityStyle = {
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  const [showEmails, setShowEmails] = useState(true);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
@@ -49,6 +70,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
+
       {/* Welcome Banner */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
@@ -63,7 +85,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
             Protection Active
           </div>
           <Link href="/scanner" className="bg-[#F97316] text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-[#EA6B0F] transition-colors flex items-center gap-1.5">
@@ -95,10 +117,10 @@ export default function DashboardPage() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Database}     label="Brokers Found"         value="47"      trend={-12} trendLabel="from initial scan" color="red"    loading={loading} />
-        <StatCard icon={Clock}        label="Removals In Progress"  value="8"                                                   color="amber"  loading={loading} />
-        <StatCard icon={CheckCircle}  label="Removals Complete"     value="39"      trend={5}   trendLabel="this week"          color="green"  loading={loading} />
-        <StatCard icon={Shield}       label="Protected Since"       value="47 days"                                             color="orange" loading={loading} />
+        <StatCard icon={Database}    label="Brokers Found"        value="47"      trend={-12} trendLabel="from initial scan" color="red"    loading={loading} />
+        <StatCard icon={Clock}       label="Removals In Progress" value="8"                                                  color="amber"  loading={loading} />
+        <StatCard icon={CheckCircle} label="Removals Complete"    value="39"      trend={5}   trendLabel="this week"         color="green"  loading={loading} />
+        <StatCard icon={Shield}      label="Protected Since"      value="47 days"                                            color="orange" loading={loading} />
       </div>
 
       {/* Privacy Score + Activity */}
@@ -152,6 +174,69 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Identities */}
+      <div className="bg-white rounded-2xl border border-[#E5E0D5] p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-sm font-semibold text-[#1A1A14]">Your Identities</h3>
+            <p className="text-xs text-[#1A1A14]/40 mt-0.5">Masked aliases routing to your real inbox</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEmails(!showEmails)}
+              className="p-1.5 text-[#1A1A14]/30 hover:text-[#1A1A14]/60 transition-colors"
+              title={showEmails ? "Hide" : "Show"}
+            >
+              {showEmails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+            <Link
+              href="/email"
+              className="flex items-center gap-1.5 bg-[#F97316] text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-[#EA6B0F] transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> New Identity
+            </Link>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {IDENTITIES.map((id) => (
+            <div key={id.label} className="border border-[#E5E0D5] rounded-xl p-4 hover:border-[#F97316]/30 hover:bg-[#FDEEDE]/10 transition-all group">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="text-xs font-semibold text-[#1A1A14] mb-0.5">{id.label}</div>
+                  <div className={`text-xs ${id.active ? "text-green-500" : "text-[#1A1A14]/30"} flex items-center gap-1`}>
+                    <span className={`w-1 h-1 rounded-full ${id.active ? "bg-green-500" : "bg-[#1A1A14]/30"}`} />
+                    {id.active ? "Active" : "Paused"}
+                  </div>
+                </div>
+                <div className="w-8 h-8 bg-[#F97316]/10 rounded-lg flex items-center justify-center group-hover:bg-[#F97316]/20 transition-colors">
+                  <Lock className="w-4 h-4 text-[#F97316]" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Mail className="w-3 h-3 text-[#1A1A14]/30 flex-shrink-0" />
+                  <span className="text-xs text-[#1A1A14]/60 font-mono truncate">
+                    {showEmails ? id.email : "••••••@shield.email"}
+                  </span>
+                </div>
+                {id.phone && (
+                  <div className="flex items-center gap-1.5">
+                    <Phone className="w-3 h-3 text-[#1A1A14]/30 flex-shrink-0" />
+                    <span className="text-xs text-[#1A1A14]/60 font-mono">
+                      {showEmails ? id.phone : "+1 (555) •••-••••"}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#E5E0D5] flex gap-3 text-xs text-[#1A1A14]/40">
+                <span>{id.emailCount} emails</span>
+                {id.phone && <span>{id.callCount} calls</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Chart + Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Chart */}
@@ -184,7 +269,7 @@ export default function DashboardPage() {
         {/* Quick Actions */}
         <div className="bg-white rounded-2xl border border-[#E5E0D5] p-6">
           <h3 className="text-sm font-semibold text-[#1A1A14] mb-4">Quick Actions</h3>
-          <div className="space-y-2">
+          <div className="space-y-2 mb-5">
             {QUICK_ACTIONS.map(({ icon: Icon, label, description, href }) => (
               <Link
                 key={label}
@@ -192,7 +277,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-3 p-3 border border-[#E5E0D5] rounded-xl hover:border-[#F97316]/30 hover:bg-[#FDEEDE]/30 transition-all group"
               >
                 <div className="w-9 h-9 bg-[#F97316]/10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-[#F97316]/20 transition-colors">
-                  <Icon className="w-4.5 h-4.5 w-[18px] h-[18px] text-[#F97316]" />
+                  <Icon className="w-[18px] h-[18px] text-[#F97316]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-[#1A1A14]">{label}</div>
@@ -201,6 +286,18 @@ export default function DashboardPage() {
                 <ArrowRight className="w-4 h-4 text-[#1A1A14]/20 group-hover:text-[#F97316] transition-colors" />
               </Link>
             ))}
+          </div>
+
+          {/* Upgrade prompt */}
+          <div className="bg-[#141410] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-[#F97316]" />
+              <span className="text-xs font-semibold text-white">Pro Plan Active</span>
+            </div>
+            <p className="text-xs text-white/40 mb-3">Weekly scans · 400+ brokers · Call guard</p>
+            <Link href="/settings" className="text-xs text-[#F97316] hover:underline font-medium flex items-center gap-1">
+              Manage plan <ArrowRight className="w-3 h-3" />
+            </Link>
           </div>
         </div>
       </div>
