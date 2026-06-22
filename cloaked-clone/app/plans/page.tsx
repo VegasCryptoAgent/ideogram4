@@ -11,6 +11,7 @@ import {
   Shield,
   Zap,
   Users,
+  Heart,
   ArrowRight,
 } from "lucide-react";
 import MarketingNavbar from "@/components/marketing/navbar";
@@ -63,6 +64,29 @@ const PLANS = [
     href: "/sign-up?plan=premium",
   },
   {
+    key: "couple",
+    name: "Couple",
+    badge: "NEW",
+    monthlyPrice: 12.99,
+    annualPrice: 10.39,
+    desc: "Full protection for you and one partner.",
+    icon: Heart,
+    iconColor: "text-pink-500",
+    iconBg: "bg-pink-500/10",
+    dark: false,
+    features: [
+      "Everything in Premium",
+      "2 members included",
+      "Shared dashboard",
+      "Combined alias pool (unlimited)",
+      "Shared virtual numbers (6 total)",
+      "Family removal (both people)",
+      "Priority support",
+    ],
+    cta: "Start Couple Trial",
+    href: "/sign-up?plan=couple",
+  },
+  {
     key: "family",
     name: "Family",
     badge: "Best Value",
@@ -91,19 +115,20 @@ const COMPARISON_ROWS: {
   feature: string;
   free: CellValue;
   premium: CellValue;
+  couple: CellValue;
   family: CellValue;
 }[] = [
-  { feature: "Data broker removals", free: "1/month", premium: "Unlimited", family: "Unlimited" },
-  { feature: "Email aliases", free: "3", premium: "Unlimited", family: "Unlimited" },
-  { feature: "Phone numbers", free: "1", premium: "3", family: "3 per member" },
-  { feature: "Spam call blocking", free: false, premium: true, family: true },
-  { feature: "Dark web monitoring", free: false, premium: true, family: true },
-  { feature: "SSN monitoring", free: false, premium: true, family: true },
-  { feature: "Password manager", free: false, premium: true, family: true },
-  { feature: "Identity insurance", free: false, premium: true, family: true },
-  { feature: "Virtual cards", free: false, premium: "Coming soon", family: "Coming soon" },
-  { feature: "Family dashboard", free: false, premium: false, family: true },
-  { feature: "Members included", free: "1", premium: "1", family: "Up to 5" },
+  { feature: "Data broker removals", free: "1/month", premium: "Unlimited", couple: "Unlimited", family: "Unlimited" },
+  { feature: "Email aliases", free: "3", premium: "Unlimited", couple: "Unlimited", family: "Unlimited" },
+  { feature: "Phone numbers", free: "1", premium: "3", couple: "6 total", family: "3 per member" },
+  { feature: "Spam call blocking", free: false, premium: true, couple: true, family: true },
+  { feature: "Dark web monitoring", free: false, premium: true, couple: true, family: true },
+  { feature: "SSN monitoring", free: false, premium: true, couple: true, family: true },
+  { feature: "Password manager", free: false, premium: true, couple: true, family: true },
+  { feature: "Identity insurance", free: false, premium: true, couple: true, family: true },
+  { feature: "Virtual cards", free: false, premium: true, couple: true, family: true },
+  { feature: "Shared dashboard", free: false, premium: false, couple: true, family: true },
+  { feature: "Members included", free: "1", premium: "1", couple: "2", family: "Up to 5" },
 ];
 
 const TESTIMONIALS = [
@@ -131,7 +156,7 @@ const FAQS = [
   },
   {
     q: "How does the annual billing discount work?",
-    a: "When you choose annual billing, Premium drops from $9.99/month to $7.99/month (billed $95.88/year), and Family drops from $14.99/month to $11.99/month (billed $143.88/year). That's roughly 20% off compared to month-to-month.",
+    a: "When you choose annual billing, Premium drops from $9.99/month to $7.99/month (billed $95.88/year), Couple drops from $12.99/month to $10.39/month, and Family drops from $14.99/month to $11.99/month (billed $143.88/year). That's roughly 20% off compared to month-to-month.",
   },
   {
     q: "Can I cancel at any time?",
@@ -139,11 +164,15 @@ const FAQS = [
   },
   {
     q: "How does the free trial work?",
-    a: "Premium and Family come with a 7-day free trial. You'll enter your payment info upfront but won't be charged until the trial ends. Cancel any time during the trial and you pay nothing.",
+    a: "Premium, Couple, and Family come with a 7-day free trial. You'll enter your payment info upfront but won't be charged until the trial ends. Cancel any time during the trial and you pay nothing.",
   },
   {
     q: "What does the Family plan include exactly?",
     a: "The Family plan covers up to 5 members under a single subscription. Each member gets their own private dashboard, unlimited aliases, and full broker removal coverage. You also get a shared family dashboard to oversee everyone's protection from one place.",
+  },
+  {
+    q: "What's the difference between Couple and Family?",
+    a: "The Couple plan covers exactly 2 people and shares a combined alias pool and 6 virtual phone numbers. The Family plan covers up to 5 people, each with 3 virtual numbers, plus a shared family oversight dashboard.",
   },
   {
     q: "Is my payment information secure?",
@@ -261,11 +290,22 @@ export default function PlansPage() {
             Save 20%
           </span>
         </motion.div>
+
+        {/* Competitive advantage banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.25 }}
+          className="inline-flex items-center gap-2 mt-5 bg-green-50 border border-green-200 text-green-700 text-xs font-semibold px-4 py-2 rounded-full"
+        >
+          <Check className="w-3.5 h-3.5 text-green-600" strokeWidth={2.5} />
+          Unlike Cloaked — all plans include working virtual cards from day one. No waitlist.
+        </motion.div>
       </section>
 
       {/* ── Plan Cards ── */}
       <section className="px-4 sm:px-6 lg:px-8 pb-20">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {PLANS.map((plan, i) => {
             const Icon = plan.icon;
             const price = annual ? plan.annualPrice : plan.monthlyPrice;
@@ -281,14 +321,16 @@ export default function PlansPage() {
                   plan.dark
                     ? "bg-[#141410] border-[#F97316]/25 shadow-2xl shadow-black/30"
                     : "bg-white border-[#E5E0D5]"
-                } ${i === 1 ? "md:-mt-4 md:mb-4" : ""}`}
+                } ${i === 1 ? "sm:-mt-4 sm:mb-4" : ""}`}
               >
                 {/* Badge */}
                 {plan.badge && (
                   <div
-                    className={`absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-3.5 py-1.5 rounded-full ${
+                    className={`absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-3.5 py-1.5 rounded-full whitespace-nowrap ${
                       plan.badge === "Most Popular"
                         ? "bg-[#F97316] text-white"
+                        : plan.badge === "NEW"
+                        ? "bg-pink-500 text-white"
                         : "bg-[#1A1A14] text-white"
                     }`}
                   >
@@ -347,6 +389,8 @@ export default function PlansPage() {
                   className={`block w-full text-center py-3.5 rounded-xl font-semibold text-sm transition-colors ${
                     plan.dark
                       ? "bg-[#F97316] text-white hover:bg-[#EA6B0F]"
+                      : plan.key === "couple"
+                      ? "bg-pink-500 text-white hover:bg-pink-600"
                       : "bg-[#141410] text-white hover:bg-black"
                   }`}
                 >
@@ -379,7 +423,7 @@ export default function PlansPage() {
           </motion.div>
 
           <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full min-w-[580px]">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr>
                   <th className="text-left pb-4 pl-4 sm:pl-0 text-xs font-semibold text-[#1A1A14]/40 uppercase tracking-wide">
@@ -387,7 +431,7 @@ export default function PlansPage() {
                   </th>
                   {PLANS.map((p) => (
                     <th key={p.key} className="pb-4 text-center">
-                      <div className={`text-sm font-bold ${p.dark ? "text-[#F97316]" : "text-[#1A1A14]"}`}>
+                      <div className={`text-sm font-bold ${p.dark ? "text-[#F97316]" : p.key === "couple" ? "text-pink-500" : "text-[#1A1A14]"}`}>
                         {p.name}
                       </div>
                       <div className="text-xs text-[#1A1A14]/40 mt-0.5">
@@ -409,6 +453,9 @@ export default function PlansPage() {
                     </td>
                     <td className="py-3.5 px-4">
                       <ComparisonCell value={row.premium} />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <ComparisonCell value={row.couple} />
                     </td>
                     <td className="py-3.5 px-4">
                       <ComparisonCell value={row.family} />
