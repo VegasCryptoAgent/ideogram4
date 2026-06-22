@@ -24,15 +24,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pageTitle = PAGE_TITLES[pathname] || "Dashboard";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
-      {/* Background */}
-      <div className="fixed inset-0 bg-mesh pointer-events-none opacity-50" />
-      <div className="fixed top-0 left-0 w-64 h-64 bg-violet-600/5 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="flex h-screen overflow-hidden bg-[#E8E3D9]">
       {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -44,10 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }`}
       >
         <div className="relative w-64 h-full">
-          <Sidebar
-            collapsed={false}
-            onToggle={() => setMobileSidebarOpen(false)}
-          />
+          <Sidebar collapsed={false} onToggle={() => setMobileSidebarOpen(false)} />
           <button
             onClick={() => setMobileSidebarOpen(false)}
             className="absolute top-4 right-4 p-1 text-white/40 hover:text-white"
@@ -66,12 +59,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
-        {/* Mobile header menu button */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Mobile menu button */}
         <div className="lg:hidden absolute top-4 left-4 z-20">
           <button
             onClick={() => setMobileSidebarOpen(true)}
-            className="p-2 text-white/60 hover:text-white glass-card rounded-lg"
+            className="p-2 text-[#1A1A14]/60 hover:text-[#1A1A14] bg-white rounded-lg border border-[#E5E0D5]"
           >
             <Menu className="w-5 h-5" />
           </button>

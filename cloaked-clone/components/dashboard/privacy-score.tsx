@@ -72,7 +72,7 @@ export default function PrivacyScore({ score, size = "md" }: PrivacyScoreProps) 
             cy={center}
             r={radius}
             fill="none"
-            stroke="rgba(255,255,255,0.08)"
+            stroke="#E5E0D5"
             strokeWidth={stroke}
           />
 
@@ -89,7 +89,6 @@ export default function PrivacyScore({ score, size = "md" }: PrivacyScoreProps) 
             strokeLinecap="round"
             transform={`rotate(-90 ${center} ${center})`}
             style={{
-              filter: `drop-shadow(0 0 8px ${category.color}80)`,
               transition: "stroke-dashoffset 0.1s linear",
             }}
           />
@@ -100,8 +99,7 @@ export default function PrivacyScore({ score, size = "md" }: PrivacyScoreProps) 
             y={center - 8}
             textAnchor="middle"
             dominantBaseline="middle"
-            fill="white"
-            className={`${fontSize} font-black`}
+            fill="#1A1A14"
             style={{ fontSize: size === "lg" ? 52 : size === "md" ? 36 : 24, fontWeight: 900 }}
           >
             {animatedScore}
@@ -131,7 +129,7 @@ export default function PrivacyScore({ score, size = "md" }: PrivacyScoreProps) 
       </div>
 
       <div className="mt-3 text-center">
-        <div className={`${labelSize} text-white/40`}>Privacy Score</div>
+        <div className={`${labelSize} text-[#1A1A14]/40`}>Privacy Score</div>
       </div>
     </motion.div>
   );
