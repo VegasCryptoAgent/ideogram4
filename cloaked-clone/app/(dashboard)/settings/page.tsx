@@ -1,7 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Lock, Bell, CreditCard, Trash2, Download, Eye, EyeOff, Check, AlertTriangle } from 'lucide-react'
+import {
+  User, Lock, Bell, CreditCard, Trash2, Download, Eye, EyeOff, Check,
+  AlertTriangle, HelpCircle, MessageCircle, Mail, Phone, ChevronDown,
+  Shield, FileText, X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -10,7 +14,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const US_STATES = [
@@ -19,6 +26,29 @@ const US_STATES = [
   'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
   'VA','WA','WV','WI','WY','DC',
 ]
+
+// ── FAQ Item for Support tab ──────────────────────────────────────────────────
+function SupportFaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border border-white/10 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+      >
+        <span className="text-sm font-medium text-zinc-300 pr-4">{q}</span>
+        <ChevronDown
+          className={`w-4 h-4 text-zinc-500 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div className="px-5 pb-4 text-sm text-zinc-400 leading-relaxed border-t border-white/10 pt-4">
+          {a}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const [saved, setSaved] = useState<string | null>(null)
@@ -48,6 +78,12 @@ export default function SettingsPage() {
     brokerFound: false, breachAlert: true,
   })
 
+  // Cancel subscription flow
+  const [cancelStep, setCancelStep] = useState<0 | 1 | 2 | 3>(0)
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelUnderstood, setCancelUnderstood] = useState(false)
+
   function saveSection(section: string) {
     setSaved(section)
     setTimeout(() => setSaved(null), 2500)
@@ -58,6 +94,98 @@ export default function SettingsPage() {
     setPhones((p) => [...p, newPhone.trim()])
     setNewPhone('')
   }
+
+  function downloadInvoice(date: string, amount: string) {
+    const content = `SHIELD PRIVACY, INC.\nInvoice\n\nDate: ${date}\nDescription: Shield Premium Subscription\nAmount: ${amount}\nStatus: Paid\n\nThank you for being a Shield member.\nsupport@shield.id`
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `shield-invoice-${date.replace(/\s/g, '-')}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportAliasesCSV() {
+    const csvData = `alias,label,forwarding,created,emails_received\namzn-x7k2@shield.app,Amazon,jreeves@gmail.com,2025-01-15,142\nntflx-p9m3@shield.app,Netflix,jreeves@gmail.com,2025-02-03,28\nshop-k4j8@shield.app,Shopping,jreeves@gmail.com,2025-03-11,67\ndocs-r2w9@shield.app,Docs & Forms,jreeves@gmail.com,2025-04-22,9\nnews-v5x1@shield.app,Newsletter,jreeves@gmail.com,2025-05-07,315\n`
+    const blob = new Blob([csvData], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'shield-aliases.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportAliasesJSON() {
+    const jsonData = JSON.stringify({
+      exported: new Date().toISOString(),
+      account: 'jreeves@gmail.com',
+      aliases: [
+        { alias: 'amzn-x7k2@shield.app', label: 'Amazon', forwarding: 'jreeves@gmail.com', created: '2025-01-15', emails_received: 142 },
+        { alias: 'ntflx-p9m3@shield.app', label: 'Netflix', forwarding: 'jreeves@gmail.com', created: '2025-02-03', emails_received: 28 },
+        { alias: 'shop-k4j8@shield.app', label: 'Shopping', forwarding: 'jreeves@gmail.com', created: '2025-03-11', emails_received: 67 },
+        { alias: 'docs-r2w9@shield.app', label: 'Docs & Forms', forwarding: 'jreeves@gmail.com', created: '2025-04-22', emails_received: 9 },
+        { alias: 'news-v5x1@shield.app', label: 'Newsletter', forwarding: 'jreeves@gmail.com', created: '2025-05-07', emails_received: 315 },
+      ],
+    }, null, 2)
+    const blob = new Blob([jsonData], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'shield-aliases.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function openCancel() {
+    setCancelStep(1)
+    setCancelReason('')
+    setCancelUnderstood(false)
+    setIsCancelOpen(true)
+  }
+
+  function closeCancelDialog() {
+    setIsCancelOpen(false)
+    setCancelStep(0)
+  }
+
+  const BILLING_HISTORY = [
+    { date: 'Jun 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
+    { date: 'May 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
+    { date: 'Apr 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
+  ]
+
+  const CANCEL_REASONS = [
+    'Too expensive',
+    'Not using it enough',
+    'Missing features I need',
+    'Found an alternative',
+    'Other',
+  ]
+
+  const SUPPORT_FAQS = [
+    {
+      q: 'How do I get a refund?',
+      a: 'Contact us within 30 days of purchase. We offer a full, no-questions-asked money-back guarantee. Refunds are processed by a human agent within 3 business days.',
+    },
+    {
+      q: 'What happens when I cancel?',
+      a: 'All aliases are disabled within 24 hours of cancellation. Your forwarding stops immediately. All your personal data is permanently deleted from our servers within 30 days.',
+    },
+    {
+      q: 'Can I change my plan?',
+      a: 'Yes — upgrade or downgrade anytime in Settings > Plan & Billing. Changes take effect at the next billing cycle.',
+    },
+    {
+      q: 'Do my aliases work after cancellation?',
+      a: 'No. Unlike some competitors, Shield immediately stops all alias forwarding upon cancellation. All aliases are permanently disabled within 24 hours.',
+    },
+    {
+      q: 'Is there a family plan?',
+      a: 'Yes — Family ($14.99/mo, up to 5 people) and Couple ($12.99/mo, 2 people). Both plans include a shared dashboard and combined alias pool.',
+    },
+  ]
 
   return (
     <div className="space-y-6">
@@ -78,14 +206,17 @@ export default function SettingsPage() {
             <Bell className="w-4 h-4 mr-1.5" /> Notifications
           </TabsTrigger>
           <TabsTrigger value="subscription" className="data-[state=active]:bg-violet-600">
-            <CreditCard className="w-4 h-4 mr-1.5" /> Subscription
+            <CreditCard className="w-4 h-4 mr-1.5" /> Plan &amp; Billing
           </TabsTrigger>
           <TabsTrigger value="privacy" className="data-[state=active]:bg-violet-600">
-            <Trash2 className="w-4 h-4 mr-1.5" /> Privacy
+            <Shield className="w-4 h-4 mr-1.5" /> Privacy
+          </TabsTrigger>
+          <TabsTrigger value="support" className="data-[state=active]:bg-violet-600">
+            <HelpCircle className="w-4 h-4 mr-1.5" /> Support
           </TabsTrigger>
         </TabsList>
 
-        {/* PROFILE */}
+        {/* ── PROFILE ─────────────────────────────────────────────────────────── */}
         <TabsContent value="profile" className="mt-6 space-y-6">
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
@@ -171,7 +302,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* SECURITY */}
+        {/* ── SECURITY ────────────────────────────────────────────────────────── */}
         <TabsContent value="security" className="mt-6">
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
@@ -207,7 +338,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* NOTIFICATIONS */}
+        {/* ── NOTIFICATIONS ───────────────────────────────────────────────────── */}
         <TabsContent value="notifications" className="mt-6 space-y-6">
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
@@ -256,52 +387,285 @@ export default function SettingsPage() {
           </Button>
         </TabsContent>
 
-        {/* SUBSCRIPTION */}
+        {/* ── PLAN & BILLING ──────────────────────────────────────────────────── */}
         <TabsContent value="subscription" className="mt-6 space-y-6">
+
+          {/* Current plan */}
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
-              <CardTitle className="text-white">Current Plan</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 text-base px-3 py-1">
-                  Pro
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white">Current Plan</CardTitle>
+                <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 px-3 py-1">
+                  Premium
                 </Badge>
-                <span className="text-zinc-400">$9.99 / month</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-white">$9.99</span>
+                <span className="text-zinc-400 text-sm">/ month</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 {[
                   ['Weekly scans', '✓'],
-                  ['200+ brokers', '✓'],
-                  ['3 virtual phones', '1 of 3 used'],
-                  ['20 email aliases', '4 of 20 used'],
+                  ['200+ brokers covered', '✓'],
+                  ['Virtual phone numbers', '1 of 3 used'],
+                  ['Email aliases', '4 of unlimited used'],
                   ['Breach monitoring', '✓'],
+                  ['Password manager', '✓'],
                 ].map(([label, val]) => (
-                  <div key={label} className="flex justify-between py-2 border-b border-white/5">
+                  <div key={label as string} className="flex justify-between py-2 border-b border-white/5 last:border-0">
                     <span className="text-zinc-400">{label}</span>
-                    <span className="text-white">{val}</span>
+                    <span className="text-white font-medium">{val}</span>
                   </div>
                 ))}
               </div>
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800">
-                  Manage Billing
-                </Button>
-                <Button variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-950/30">
-                  Cancel Plan
-                </Button>
+
+              <Separator className="bg-white/10" />
+
+              {/* Next billing + card on file */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white/5 rounded-xl p-4">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Next billing date</p>
+                  <p className="text-white font-semibold">July 9, 2026</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Card on file</p>
+                    <p className="text-white font-semibold">Visa •••• 4242</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">Expires 08/28</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="border-zinc-700 hover:bg-zinc-800 text-xs">
+                    Edit
+                  </Button>
+                </div>
+              </div>
+
+              {/* Plan upgrade options */}
+              <div className="space-y-2">
+                <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold">Upgrade your plan</p>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 gap-2">
+                    Upgrade to Family
+                    <Badge className="bg-zinc-700 text-zinc-300 text-xs ml-1">$14.99/mo</Badge>
+                  </Button>
+                  <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 gap-2">
+                    Add Couple Plan
+                    <Badge className="bg-zinc-700 text-zinc-300 text-xs ml-1">$12.99/mo</Badge>
+                  </Button>
+                </div>
+              </div>
+
+              <Separator className="bg-white/10" />
+
+              <button
+                onClick={openCancel}
+                className="text-sm text-zinc-500 hover:text-red-400 transition-colors underline underline-offset-2"
+              >
+                Cancel subscription
+              </button>
+            </CardContent>
+          </Card>
+
+          {/* Billing history */}
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader>
+              <CardTitle className="text-white">Billing History</CardTitle>
+              <CardDescription className="text-zinc-400">Your recent invoices.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-2 text-zinc-500 font-medium">Date</th>
+                      <th className="text-left py-2 text-zinc-500 font-medium">Description</th>
+                      <th className="text-left py-2 text-zinc-500 font-medium">Amount</th>
+                      <th className="text-left py-2 text-zinc-500 font-medium">Status</th>
+                      <th className="text-left py-2 text-zinc-500 font-medium">Invoice</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {BILLING_HISTORY.map((row) => (
+                      <tr key={row.date} className="border-b border-white/5 last:border-0">
+                        <td className="py-3 text-zinc-300">{row.date}</td>
+                        <td className="py-3 text-zinc-300">{row.description}</td>
+                        <td className="py-3 text-white font-medium">{row.amount}</td>
+                        <td className="py-3">
+                          <Badge className="bg-green-500/15 text-green-400 border-green-500/20 text-xs">
+                            {row.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3">
+                          <button
+                            onClick={() => downloadInvoice(row.date, row.amount)}
+                            className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="text-xs">Download</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
+
+          {/* Cancellation multi-step dialog */}
+          <Dialog open={isCancelOpen} onOpenChange={(open) => { if (!open) closeCancelDialog() }}>
+            <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-lg">
+              {/* Step 1: What you'll lose */}
+              {cancelStep === 1 && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-white text-xl">Before you go...</DialogTitle>
+                    <DialogDescription className="text-zinc-400">
+                      Cancelling Shield means losing access to all of these protections.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    {[
+                      'Unlimited email aliases — all will stop forwarding',
+                      'Active data broker removals — requests stop immediately',
+                      'Virtual phone numbers — calls and texts will stop routing',
+                      'Dark web & SSN monitoring alerts',
+                      'Spam call blocking via Call Guard',
+                      'Password manager vault access',
+                    ].map((item) => (
+                      <div key={item} className="flex items-start gap-3">
+                        <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-zinc-300">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <DialogFooter className="gap-2 sm:gap-2">
+                    <Button variant="ghost" onClick={closeCancelDialog} className="text-zinc-400 hover:text-white">
+                      Keep my plan
+                    </Button>
+                    <Button
+                      className="bg-zinc-700 hover:bg-zinc-600 text-white"
+                      onClick={() => setCancelStep(2)}
+                    >
+                      Continue cancelling
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {/* Step 2: Why are you leaving? */}
+              {cancelStep === 2 && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-white text-xl">Why are you leaving?</DialogTitle>
+                    <DialogDescription className="text-zinc-400">
+                      Your feedback helps us improve Shield for everyone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 py-2">
+                    {CANCEL_REASONS.map((reason) => (
+                      <label
+                        key={reason}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          cancelReason === reason
+                            ? 'border-violet-500/50 bg-violet-500/10'
+                            : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="cancel-reason"
+                          value={reason}
+                          checked={cancelReason === reason}
+                          onChange={() => setCancelReason(reason)}
+                          className="accent-violet-500"
+                        />
+                        <span className="text-sm text-zinc-300">{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <DialogFooter className="gap-2 sm:gap-2">
+                    <Button variant="ghost" onClick={() => setCancelStep(1)} className="text-zinc-400 hover:text-white">
+                      Back
+                    </Button>
+                    <Button
+                      className="bg-zinc-700 hover:bg-zinc-600 text-white"
+                      disabled={!cancelReason}
+                      onClick={() => setCancelStep(3)}
+                    >
+                      Continue
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {/* Step 3: Data deletion confirmation */}
+              {cancelStep === 3 && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-white text-xl">Your data will be deleted</DialogTitle>
+                    <DialogDescription className="text-zinc-400">
+                      Here's exactly what happens when you cancel Shield.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    {[
+                      'All aliases will be permanently disabled within 24 hours',
+                      'Your forwarding will stop immediately upon cancellation',
+                      'All your data will be deleted within 30 days',
+                      'You will NOT continue to receive calls/texts through Shield after cancellation',
+                      'You can export your data before cancelling',
+                    ].map((item) => (
+                      <div key={item} className="flex items-start gap-3">
+                        <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-zinc-300">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cancelUnderstood}
+                        onChange={(e) => setCancelUnderstood(e.target.checked)}
+                        className="mt-0.5 accent-red-500"
+                      />
+                      <span className="text-sm text-zinc-400">
+                        I understand my aliases will be disabled and my data will be permanently deleted.
+                      </span>
+                    </label>
+                  </div>
+
+                  <DialogFooter className="gap-2 sm:gap-2">
+                    <Button variant="ghost" onClick={() => setCancelStep(2)} className="text-zinc-400 hover:text-white">
+                      Back
+                    </Button>
+                    <Button
+                      className="bg-red-700 hover:bg-red-600 text-white disabled:opacity-40"
+                      disabled={!cancelUnderstood}
+                      onClick={closeCancelDialog}
+                    >
+                      Confirm Cancellation
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
-        {/* PRIVACY */}
+        {/* ── PRIVACY ─────────────────────────────────────────────────────────── */}
         <TabsContent value="privacy" className="mt-6 space-y-6">
+
+          {/* Data Export */}
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
               <CardTitle className="text-white">Data Export</CardTitle>
               <CardDescription className="text-zinc-400">
-                Download a copy of all your data stored in Shielded.
+                Download a copy of all your data stored in Shield.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -312,6 +676,64 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Alias Data Portability — NEW */}
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader>
+              <CardTitle className="text-white">Export Your Aliases</CardTitle>
+              <CardDescription className="text-zinc-400">
+                Download all your email aliases, phone numbers, and activity data as CSV or JSON.
+                You own your data — take it with you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                className="border-zinc-700 hover:bg-zinc-800"
+                onClick={exportAliasesCSV}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export as CSV
+              </Button>
+              <Button
+                variant="outline"
+                className="border-zinc-700 hover:bg-zinc-800"
+                onClick={exportAliasesJSON}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export as JSON
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Shield Data Commitments — NEW */}
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Shield className="w-5 h-5 text-green-400" />
+                Shield's Data Commitments
+              </CardTitle>
+              <CardDescription className="text-zinc-400">
+                Our ironclad privacy promises to you — in plain language.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                'We never sell your data to third parties',
+                'We never monetize your usage data',
+                'All aliases stop working immediately upon cancellation',
+                'Your data is permanently deleted within 30 days of cancellation',
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-green-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Check className="w-3 h-3 text-green-400" strokeWidth={2.5} />
+                  </div>
+                  <span className="text-sm text-zinc-300">{item}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Delete Account */}
           <Card className="bg-red-950/20 border-red-900/30">
             <CardHeader>
               <CardTitle className="text-red-300 flex items-center gap-2">
@@ -319,7 +741,8 @@ export default function SettingsPage() {
                 Delete Account
               </CardTitle>
               <CardDescription className="text-red-400/70">
-                Permanently delete your account, cancel your subscription, release all virtual phone numbers, and erase all your data from Shielded servers. This cannot be undone.
+                Permanently delete your account, cancel your subscription, release all virtual phone numbers,
+                and erase all your data from Shield servers. This cannot be undone.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -333,7 +756,8 @@ export default function SettingsPage() {
                   <DialogHeader>
                     <DialogTitle className="text-red-400">Delete Account</DialogTitle>
                     <DialogDescription className="text-zinc-400">
-                      This will permanently delete all your data. Type <strong className="text-white">DELETE</strong> to confirm.
+                      This will permanently delete all your data. Type{' '}
+                      <strong className="text-white">DELETE</strong> to confirm.
                     </DialogDescription>
                   </DialogHeader>
                   <Input
@@ -356,6 +780,108 @@ export default function SettingsPage() {
               </Dialog>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── SUPPORT ─────────────────────────────────────────────────────────── */}
+        <TabsContent value="support" className="mt-6 space-y-6">
+
+          {/* Header */}
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-xl font-bold text-white">Real humans. Not chatbots.</h2>
+              <Badge className="bg-green-500/15 text-green-400 border-green-500/25 text-xs px-2.5 py-1">
+                24/7 Human Support
+              </Badge>
+            </div>
+            <p className="text-zinc-400 text-sm">
+              Every Shield support interaction is handled by a real person. No AI bots, no scripts.
+            </p>
+          </div>
+
+          {/* Support channel cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Live Chat */}
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="pt-5 space-y-4">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
+                  <MessageCircle className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold mb-1">Live Chat</h3>
+                  <p className="text-zinc-400 text-xs leading-relaxed">
+                    Real support agents available Mon–Sun, 8am–10pm ET. Avg response: under 3 minutes.
+                  </p>
+                </div>
+                <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm">
+                  Start Chat
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Email */}
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="pt-5 space-y-4">
+                <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold mb-1">Email</h3>
+                  <p className="text-zinc-400 text-xs leading-relaxed">
+                    support@shield.id — We reply within 2 hours. Every ticket is handled by a real human agent.
+                  </p>
+                </div>
+                <a href="mailto:support@shield.id">
+                  <Button variant="outline" className="w-full border-zinc-700 hover:bg-zinc-800 text-sm">
+                    Send Email
+                  </Button>
+                </a>
+              </CardContent>
+            </Card>
+
+            {/* Phone */}
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="pt-5 space-y-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                  <Phone className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold mb-1">Phone</h3>
+                  <p className="text-zinc-400 text-xs leading-relaxed">
+                    1-800-SHIELD-1 — Mon–Fri 9am–6pm ET. Speak directly to a support agent.
+                  </p>
+                </div>
+                <a href="tel:18007443531">
+                  <Button variant="outline" className="w-full border-zinc-700 hover:bg-zinc-800 text-sm">
+                    Call Now
+                  </Button>
+                </a>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Guarantee box */}
+          <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+              <Check className="w-5 h-5 text-green-400" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-white font-semibold mb-1">30-day money-back guarantee</p>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                No questions asked. Full refund processed within 3 business days by a real human agent.
+                Contact us anytime within 30 days of your purchase.
+              </p>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div>
+            <h3 className="text-white font-semibold mb-3">Frequently Asked Questions</h3>
+            <div className="space-y-2">
+              {SUPPORT_FAQS.map((faq) => (
+                <SupportFaqItem key={faq.q} q={faq.q} a={faq.a} />
+              ))}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

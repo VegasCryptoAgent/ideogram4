@@ -17,6 +17,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  Wand2,
+  CreditCard,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +29,11 @@ const NAV_ITEMS = [
   { href: "/brokers", icon: Database, label: "Data Brokers", badge: "47" },
   { href: "/phone", icon: Phone, label: "Virtual Numbers" },
   { href: "/email", icon: Mail, label: "Email Aliases" },
+  { href: "/autocloak", icon: Wand2, label: "AutoCloak", badge: "AI" },
   { href: "/spam", icon: AlertOctagon, label: "Spam Filter" },
   { href: "/breach", icon: ShieldAlert, label: "Breach Monitor", badge: "!" },
+  { href: "/cards", icon: CreditCard, label: "Virtual Cards" },
+  { href: "/passwords", icon: KeyRound, label: "Password Manager" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -99,7 +105,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                             ? "bg-white/20 text-white"
                             : badge === "!"
                             ? "bg-red-500/20 text-red-400"
-                            : badge === "New"
+                            : badge === "New" || badge === "AI"
                             ? "bg-green-500/20 text-green-400"
                             : "bg-white/10 text-white/40"
                         )}
@@ -133,7 +139,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <Zap className="w-4 h-4 text-[#F97316]" />
               <span className="text-xs font-semibold text-[#F97316]">Pro Plan</span>
             </div>
-            <div className="text-xs text-white/40">Weekly scans · 200+ brokers</div>
+            <div className="text-xs text-white/40">AI Call Guard · AutoCloak · Cards</div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -12,8 +12,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/brokers": "Data Brokers",
   "/phone": "Virtual Phone Numbers",
   "/email": "Email Aliases",
+  "/autocloak": "AutoCloak AI",
   "/spam": "Spam Filter",
   "/breach": "Breach Monitor",
+  "/cards": "Virtual Cards",
+  "/passwords": "Password Manager",
   "/settings": "Settings",
 };
 
