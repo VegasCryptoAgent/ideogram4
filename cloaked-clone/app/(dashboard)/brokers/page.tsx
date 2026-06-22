@@ -31,19 +31,13 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type BrokerStage =
-  | "scanning"
-  | "found"
-  | "submitted"
-  | "processing"
-  | "removed"
-  | "monitoring";
+type BrokerStatus = "found" | "requested" | "removed" | "monitoring";
 
 interface Broker {
   id: string;
   name: string;
   category: string;
-  stage: BrokerStage;
+  status: BrokerStatus;
   dateFound: string;
   dateRemoved?: string;
   recordsFound: number;
@@ -55,115 +49,97 @@ interface Broker {
 // ─── Mock Data (25 brokers) ───────────────────────────────────────────────────
 
 const MOCK_BROKERS: Broker[] = [
-  { id: "1",  name: "Spokeo",             category: "People Search",    stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 22, 2024", recordsFound: 3,  url: "spokeo.com" },
-  { id: "2",  name: "WhitePages",         category: "People Search",    stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 28, 2024", recordsFound: 2,  url: "whitepages.com" },
-  { id: "3",  name: "BeenVerified",       category: "Background Check", stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 5, 2025",  recordsFound: 1,  url: "beenverified.com" },
-  { id: "4",  name: "TruthFinder",        category: "Background Check", stage: "processing", dateFound: "Jan 8, 2025",  recordsFound: 2,             url: "truthfinder.com" },
-  { id: "5",  name: "Radaris",            category: "People Search",    stage: "submitted",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "radaris.com" },
-  { id: "6",  name: "FastPeopleSearch",   category: "People Search",    stage: "found",      dateFound: "Jan 15, 2025", recordsFound: 4,             url: "fastpeoplesearch.com" },
-  { id: "7",  name: "Intelius",           category: "Background Check", stage: "found",      dateFound: "Jan 15, 2025", recordsFound: 1,             url: "intelius.com" },
-  { id: "8",  name: "MyLife",             category: "Reputation",       stage: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Dec 1, 2024",  recordsFound: 1,  url: "mylife.com",       lastChecked: "3 days ago", nextScan: "27 days" },
-  { id: "9",  name: "Pipl",              category: "Identity",          stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 2, 2025",  recordsFound: 2,  url: "pipl.com" },
-  { id: "10", name: "ZabaSearch",         category: "People Search",    stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 10, 2025", recordsFound: 1,  url: "zabasearch.com" },
-  { id: "11", name: "PeopleSmart",        category: "People Search",    stage: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Nov 30, 2024", recordsFound: 2,  url: "peoplesmart.com",  lastChecked: "1 day ago",  nextScan: "29 days" },
-  { id: "12", name: "Instant Checkmate",  category: "Background Check", stage: "submitted",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "instantcheckmate.com" },
-  { id: "13", name: "Acxiom",            category: "Data Aggregator",   stage: "removed",    dateFound: "Dec 10, 2024", dateRemoved: "Jan 3, 2025",  recordsFound: 5,  url: "acxiom.com" },
-  { id: "14", name: "LexisNexis",         category: "Data Aggregator",  stage: "monitoring", dateFound: "Nov 15, 2024", dateRemoved: "Dec 5, 2024",  recordsFound: 3,  url: "lexisnexis.com",   lastChecked: "5 days ago", nextScan: "25 days" },
-  { id: "15", name: "PeopleFinder",       category: "People Search",    stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 8, 2025",  recordsFound: 2,  url: "peoplefinder.com" },
-  { id: "16", name: "PeekYou",            category: "People Search",    stage: "submitted",  dateFound: "Jan 12, 2025", recordsFound: 1,             url: "peekyou.com" },
-  { id: "17", name: "US Search",          category: "People Search",    stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 15, 2025", recordsFound: 2,  url: "ussearch.com" },
-  { id: "18", name: "CheckPeople",        category: "Background Check", stage: "processing", dateFound: "Jan 9, 2025",  recordsFound: 1,             url: "checkpeople.com" },
-  { id: "19", name: "Nuwber",             category: "People Search",    stage: "found",      dateFound: "Jan 17, 2025", recordsFound: 3,             url: "nuwber.com" },
-  { id: "20", name: "Arrest.org",         category: "Public Records",   stage: "submitted",  dateFound: "Jan 10, 2025", recordsFound: 1,             url: "arrest.org" },
-  { id: "21", name: "Epsilon",            category: "Data Aggregator",  stage: "removed",    dateFound: "Dec 12, 2024", dateRemoved: "Jan 12, 2025", recordsFound: 4,  url: "epsilon.com" },
-  { id: "22", name: "CoreLogic",          category: "Data Aggregator",  stage: "monitoring", dateFound: "Nov 18, 2024", dateRemoved: "Dec 8, 2024",  recordsFound: 2,  url: "corelogic.com",    lastChecked: "2 days ago", nextScan: "28 days" },
-  { id: "23", name: "Data.com",           category: "Data Aggregator",  stage: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 6, 2025",  recordsFound: 1,  url: "data.com" },
-  { id: "24", name: "Equifax Marketing",  category: "Data Aggregator",  stage: "processing", dateFound: "Jan 14, 2025", recordsFound: 2,             url: "equifaxmarketing.com" },
-  { id: "25", name: "PeopleSurfer",       category: "People Search",    stage: "found",      dateFound: "Jan 18, 2025", recordsFound: 2,             url: "peoplesurfer.com" },
+  { id: "1",  name: "Spokeo",            category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 22, 2024", recordsFound: 3,  url: "spokeo.com" },
+  { id: "2",  name: "WhitePages",        category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 28, 2024", recordsFound: 2,  url: "whitepages.com" },
+  { id: "3",  name: "BeenVerified",      category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 5, 2025",  recordsFound: 1,  url: "beenverified.com" },
+  { id: "4",  name: "TruthFinder",       category: "Background Check", status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 2,             url: "truthfinder.com" },
+  { id: "5",  name: "Radaris",           category: "People Search",    status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "radaris.com" },
+  { id: "6",  name: "FastPeopleSearch",  category: "People Search",    status: "found",      dateFound: "Jan 15, 2025", recordsFound: 4,             url: "fastpeoplesearch.com" },
+  { id: "7",  name: "Intelius",          category: "Background Check", status: "found",      dateFound: "Jan 15, 2025", recordsFound: 1,             url: "intelius.com" },
+  { id: "8",  name: "MyLife",            category: "Reputation",       status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Dec 1, 2024",  recordsFound: 1,  url: "mylife.com",            lastChecked: "3 days ago", nextScan: "27 days" },
+  { id: "9",  name: "Pipl",             category: "Identity",          status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 2, 2025",  recordsFound: 2,  url: "pipl.com" },
+  { id: "10", name: "ZabaSearch",        category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 10, 2025", recordsFound: 1,  url: "zabasearch.com" },
+  { id: "11", name: "PeopleSmart",       category: "People Search",    status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Nov 30, 2024", recordsFound: 2,  url: "peoplesmart.com",       lastChecked: "1 day ago",  nextScan: "29 days" },
+  { id: "12", name: "Instant Checkmate", category: "Background Check", status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "instantcheckmate.com" },
+  { id: "13", name: "Acxiom",           category: "Marketing",         status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 10, 2024", recordsFound: 5,  url: "acxiom.com" },
+  { id: "14", name: "LexisNexis",        category: "Identity",         status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 3,             url: "lexisnexis.com" },
+  { id: "15", name: "PeopleFinder",      category: "People Search",    status: "found",      dateFound: "Jan 15, 2025", recordsFound: 2,             url: "peoplefinder.com" },
+  { id: "16", name: "PeekYou",           category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 3, 2025",  recordsFound: 1,  url: "peekyou.com" },
+  { id: "17", name: "US Search",         category: "People Search",    status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Nov 30, 2024", recordsFound: 1,  url: "ussearch.com",          lastChecked: "2 days ago", nextScan: "28 days" },
+  { id: "18", name: "CheckPeople",       category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 29, 2024", recordsFound: 2,  url: "checkpeople.com" },
+  { id: "19", name: "Nuwber",            category: "People Search",    status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "nuwber.com" },
+  { id: "20", name: "Epsilon",           category: "Marketing",        status: "found",      dateFound: "Jan 15, 2025", recordsFound: 4,             url: "epsilon.com" },
+  { id: "21", name: "CoreLogic",         category: "Financial",        status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 2,             url: "corelogic.com" },
+  { id: "22", name: "Data.com",          category: "Marketing",        status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 5, 2024",  recordsFound: 1,  url: "data.com" },
+  { id: "23", name: "Arrest.org",        category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 8, 2025",  recordsFound: 1,  url: "arrest.org" },
+  { id: "24", name: "TowerData",         category: "Marketing",        status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Dec 1, 2024",  recordsFound: 3,  url: "towerdata.com",         lastChecked: "4 days ago", nextScan: "26 days" },
+  { id: "25", name: "Equifax Marketing", category: "Financial",        status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 20, 2024", recordsFound: 2,  url: "equifax.com" },
 ];
 
-// ─── Stage system ─────────────────────────────────────────────────────────────
+// ─── Status Config ────────────────────────────────────────────────────────────
 
-const STAGE_ORDER: BrokerStage[] = ["found", "submitted", "processing", "removed"];
-
-const STAGE_CONFIG: Record<
-  BrokerStage,
+const STATUS_CONFIG: Record<
+  BrokerStatus,
   { label: string; color: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  scanning:   { label: "Scanning",    color: "text-zinc-400",   icon: RefreshCw },
-  found:      { label: "Found",       color: "text-red-400",    icon: AlertCircle },
-  submitted:  { label: "Submitted",   color: "text-amber-400",  icon: Clock },
-  processing: { label: "Processing",  color: "text-blue-400",   icon: Clock },
-  removed:    { label: "Removed",     color: "text-green-400",  icon: CheckCircle },
-  monitoring: { label: "Monitoring",  color: "text-violet-400", icon: Eye },
+  found:      { label: "Found",             color: "text-red-400",    icon: AlertCircle },
+  requested:  { label: "Removal Requested", color: "text-amber-400",  icon: Clock },
+  removed:    { label: "Removed",           color: "text-green-400",  icon: CheckCircle },
+  monitoring: { label: "Monitoring",        color: "text-violet-400", icon: Eye },
 };
-
-// Maps stage to a "legacy status" for tab filtering convenience
-function stageToTab(stage: BrokerStage): string {
-  if (stage === "found") return "Found";
-  if (stage === "submitted" || stage === "processing") return "Removal Requested";
-  if (stage === "removed") return "Removed";
-  if (stage === "monitoring") return "Monitoring";
-  return "All";
-}
 
 const TABS = ["All", "Found", "Removal Requested", "Removed", "Monitoring"] as const;
 
-// ─── Progress Dots Component ──────────────────────────────────────────────────
+function statusToTab(status: BrokerStatus): string {
+  if (status === "found") return "Found";
+  if (status === "requested") return "Removal Requested";
+  if (status === "removed") return "Removed";
+  if (status === "monitoring") return "Monitoring";
+  return "All";
+}
 
-function StageProgressBar({ stage }: { stage: BrokerStage }) {
-  const steps: { key: BrokerStage; label: string }[] = [
-    { key: "found",     label: "Scan" },
-    { key: "submitted", label: "Found" },
-    { key: "removed",   label: "Submitted" },
-    { key: "monitoring",label: "Removed" },
-  ];
+// ─── Progress Dots ────────────────────────────────────────────────────────────
 
-  // Determine how many steps are complete
-  const stageRank: Record<BrokerStage, number> = {
-    scanning:   0,
-    found:      1,
-    submitted:  2,
-    processing: 2,
-    removed:    3,
-    monitoring: 4,
-  };
-  const rank = stageRank[stage];
+function ProgressDots({ status }: { status: BrokerStatus }) {
+  const steps = ["Scanned", "Found", "Submitted", "Removed"];
+  const filled =
+    status === "found" ? 2
+    : status === "requested" ? 3
+    : status === "removed" || status === "monitoring" ? 4
+    : 1;
 
   return (
     <div className="flex items-center gap-1">
-      {steps.map((s, i) => {
-        const filled = rank > i;
-        const active = rank === i + 1;
-        return (
-          <React.Fragment key={s.key}>
+      {steps.map((s, i) => (
+        <div key={s} className="flex items-center gap-1">
+          <div
+            className={`w-2 h-2 rounded-full transition-colors ${
+              i < filled
+                ? status === "monitoring"
+                  ? "bg-violet-400"
+                  : "bg-green-400"
+                : "bg-white/10"
+            }`}
+            title={s}
+          />
+          {i < steps.length - 1 && (
             <div
-              title={s.label}
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                filled || active
-                  ? stage === "monitoring"
-                    ? "bg-violet-500"
-                    : stage === "removed" || filled
-                    ? "bg-green-500"
-                    : "bg-amber-500"
-                  : "bg-zinc-700"
+              className={`w-3 h-px ${
+                i < filled - 1
+                  ? status === "monitoring"
+                    ? "bg-violet-400/50"
+                    : "bg-green-400/50"
+                  : "bg-white/10"
               }`}
             />
-            {i < steps.length - 1 && (
-              <div
-                className={`h-px w-3 ${
-                  filled ? "bg-green-600" : "bg-zinc-700"
-                }`}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
+          )}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─── Removal Certificate Modal ────────────────────────────────────────────────
+// ─── Certificate Modal ────────────────────────────────────────────────────────
 
 function generateHash(): string {
   const chars = "0123456789abcdef";
@@ -179,10 +155,11 @@ function CertificateModal({
 }) {
   const certId = `CERT-${broker.id}-2026`;
   const hash = useMemo(() => generateHash(), []);
-
-  function handlePrint() {
-    window.print();
-  }
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
     <motion.div
@@ -190,83 +167,109 @@ function CertificateModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0, y: 16 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 16 }}
         transition={{ type: "spring", stiffness: 300, damping: 28 }}
-        className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
         <div className="flex justify-end p-4 pb-0">
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5"
+            className="text-zinc-400 hover:text-zinc-600 transition-colors p-1 rounded-lg hover:bg-zinc-100"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Certificate body */}
-        <div className="px-8 pb-6">
+        <div className="px-8 pb-8 pt-2">
           {/* Logo */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/30 mb-3">
-              <span className="text-2xl font-serif font-bold text-violet-300">S</span>
+          <div className="text-center mb-6 border-b border-zinc-200 pb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-100 border border-violet-200 mb-3">
+              <span className="text-2xl font-serif font-bold text-violet-600">S</span>
             </div>
-            <div className="text-xs text-zinc-500 tracking-widest uppercase">Shield Privacy</div>
+            <div className="text-xs text-zinc-400 tracking-widest uppercase font-medium">
+              Shield Privacy
+            </div>
           </div>
 
           {/* Headline */}
-          <div className="text-center border-y border-white/10 py-4 mb-5">
-            <p className="text-xs text-zinc-500 tracking-widest uppercase mb-1">Official</p>
-            <h2 className="text-xl font-bold text-white tracking-wide">
+          <div className="text-center mb-6">
+            <p className="text-xs text-zinc-400 tracking-widest uppercase mb-1">Official</p>
+            <h2 className="text-2xl font-bold text-zinc-900 tracking-wide" style={{ fontFamily: "Georgia, serif" }}>
               Data Removal Certificate
             </h2>
           </div>
 
+          {/* Divider */}
+          <div className="border-t border-zinc-200 mb-5" />
+
           {/* Fields */}
           <div className="space-y-3 mb-5">
             {[
-              { label: "Certificate ID",    value: certId },
-              { label: "Broker Name",       value: broker.name },
-              { label: "Your Name",         value: "James Reeves" },
-              { label: "Removal Date",      value: broker.dateRemoved ?? "—" },
-              { label: "Records Removed",   value: `${broker.recordsFound} listing${broker.recordsFound !== 1 ? "s" : ""}` },
-            ].map(({ label, value }) => (
+              { label: "Certificate ID",   value: certId,                                     mono: true },
+              { label: "Issued To",        value: "James Reeves",                             mono: false },
+              { label: "Date Issued",      value: today,                                      mono: false },
+              { label: "Data Broker",      value: broker.name,                                mono: false },
+              { label: "Domain",           value: broker.url,                                 mono: true },
+              { label: "Records Removed",  value: `${broker.recordsFound} record${broker.recordsFound !== 1 ? "s" : ""}`, mono: false },
+              { label: "Removal Confirmed", value: broker.dateRemoved ?? "—",                 mono: false },
+            ].map(({ label, value, mono }) => (
               <div key={label} className="flex justify-between items-start gap-4">
-                <span className="text-xs text-zinc-500 shrink-0">{label}</span>
-                <span className="text-sm text-white font-medium text-right">{value}</span>
+                <span className="text-xs text-zinc-400 shrink-0 w-36">{label}</span>
+                <span className={`text-sm text-zinc-900 font-medium text-right ${mono ? "font-mono" : ""}`}>
+                  {value}
+                </span>
               </div>
             ))}
             <div className="flex justify-between items-start gap-4">
-              <span className="text-xs text-zinc-500 shrink-0">Verification</span>
-              <span className="text-xs text-zinc-400 font-mono text-right break-all">
-                sha256:{hash.slice(0, 32)}...
+              <span className="text-xs text-zinc-400 shrink-0 w-36">Verification</span>
+              <span className="text-xs text-zinc-500 font-mono text-right break-all">
+                sha256:{hash.slice(0, 16)}...{hash.slice(-4)}
               </span>
             </div>
           </div>
 
+          {/* Divider */}
+          <div className="border-t border-zinc-200 mb-5" />
+
           {/* Description */}
-          <p className="text-xs text-zinc-400 text-center leading-relaxed border border-white/8 rounded-lg p-4 mb-5">
-            This certificate confirms that Shield Privacy successfully submitted and confirmed
-            removal of your personal data from the above data broker.
+          <p className="text-xs text-zinc-500 text-center leading-relaxed mb-6">
+            This certificate confirms that Shield Privacy successfully submitted and verified
+            the removal of the above individual&apos;s personal data from {broker.name}.
           </p>
 
-          {/* Download */}
-          <Button
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white mb-3"
-            onClick={handlePrint}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download as PDF
-          </Button>
+          {/* Footer text */}
+          <div className="border-t border-zinc-200 pt-4 mb-5 text-center">
+            <p className="text-[11px] text-zinc-400">
+              Shield Privacy Inc. &nbsp;·&nbsp; SOC 2 Certified &nbsp;·&nbsp; BBB A+ Rated
+            </p>
+            <p className="text-[11px] text-zinc-400">support@shield.id</p>
+          </div>
 
-          {/* Footer */}
-          <p className="text-xs text-zinc-600 text-center">
-            Shield Privacy — BBB A+ Rated — SOC 2 Certified
-          </p>
+          {/* Actions */}
+          <div className="flex gap-3">
+            <Button
+              className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+              onClick={() => window.print()}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download Certificate
+            </Button>
+            <Button
+              variant="outline"
+              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              onClick={onClose}
+            >
+              Close
+            </Button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -280,11 +283,11 @@ export default function BrokersPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [certificateBrokerId, setCertificateBrokerId] = useState<string | null>(null);
+  const [certBroker, setCertBroker] = useState<Broker | null>(null);
 
   const filtered = useMemo(() => {
     return MOCK_BROKERS.filter((b) => {
-      const tabLabel = stageToTab(b.stage);
+      const tabLabel = statusToTab(b.status);
       const matchesTab = activeTab === "All" || tabLabel === activeTab;
       const matchesSearch =
         b.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -294,20 +297,20 @@ export default function BrokersPage() {
     });
   }, [activeTab, search, category]);
 
-  const categories = Array.from(new Set(MOCK_BROKERS.map((b) => b.category)));
+  const categories = Array.from(new Set(MOCK_BROKERS.map((b) => b.category))).sort();
 
   // Pipeline counts
   const pipelineCounts = {
-    found:      MOCK_BROKERS.filter((b) => b.stage === "found").length,
-    submitted:  MOCK_BROKERS.filter((b) => b.stage === "submitted" || b.stage === "processing").length,
-    removed:    MOCK_BROKERS.filter((b) => b.stage === "removed").length,
-    monitoring: MOCK_BROKERS.filter((b) => b.stage === "monitoring").length,
+    found:      MOCK_BROKERS.filter((b) => b.status === "found").length,
+    requested:  MOCK_BROKERS.filter((b) => b.status === "requested").length,
+    removed:    MOCK_BROKERS.filter((b) => b.status === "removed").length,
+    monitoring: MOCK_BROKERS.filter((b) => b.status === "monitoring").length,
   };
 
   const tabCounts: Record<string, number> = {
     All: MOCK_BROKERS.length,
     Found: pipelineCounts.found,
-    "Removal Requested": pipelineCounts.submitted,
+    "Removal Requested": pipelineCounts.requested,
     Removed: pipelineCounts.removed,
     Monitoring: pipelineCounts.monitoring,
   };
@@ -329,25 +332,21 @@ export default function BrokersPage() {
     }
   }
 
-  const certBroker = certificateBrokerId
-    ? MOCK_BROKERS.find((b) => b.id === certificateBrokerId) ?? null
-    : null;
-
   return (
     <div className="space-y-6">
       {/* ── Speed callout ── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-start gap-3 px-5 py-4 rounded-xl border border-orange-600/40 bg-orange-950/30"
+        className="bg-[#F97316]/10 border border-[#F97316]/30 rounded-xl p-4 flex items-center gap-3"
       >
-        <Zap className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+        <span className="text-2xl flex-shrink-0">⚡</span>
         <div>
-          <p className="text-sm font-semibold text-orange-300">
+          <p className="text-white font-semibold text-sm">
             Shield removes your data 3x faster than Cloaked
           </p>
-          <p className="text-xs text-orange-400/70 mt-0.5">
-            Average 5 business days vs 3–4 weeks. Your data, gone faster.
+          <p className="text-white/50 text-xs mt-0.5">
+            Average removal: 5 business days. Cloaked averages 3–4 weeks.
           </p>
         </div>
       </motion.div>
@@ -358,13 +357,13 @@ export default function BrokersPage() {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {[
               { label: "Found",      count: pipelineCounts.found,      color: "text-red-400",    bar: "bg-red-500" },
-              { label: "Requested",  count: pipelineCounts.submitted,   color: "text-amber-400",  bar: "bg-amber-500" },
-              { label: "Removed",    count: pipelineCounts.removed,     color: "text-green-400",  bar: "bg-green-500" },
-              { label: "Monitoring", count: pipelineCounts.monitoring,  color: "text-violet-400", bar: "bg-violet-500" },
+              { label: "Requested",  count: pipelineCounts.requested,  color: "text-amber-400",  bar: "bg-amber-500" },
+              { label: "Removed",    count: pipelineCounts.removed,    color: "text-green-400",  bar: "bg-green-500" },
+              { label: "Monitoring", count: pipelineCounts.monitoring, color: "text-violet-400", bar: "bg-violet-500" },
             ].map(({ label, count, color, bar }, i, arr) => (
               <React.Fragment key={label}>
                 <div className="flex-1 text-center">
-                  <div className={`text-2xl font-black mb-1 ${color}`}>{count}</div>
+                  <div className={`text-3xl font-black mb-1 ${color}`}>{count}</div>
                   <div className="text-xs text-white/40">{label}</div>
                   <div className={`h-1 rounded-full mt-2 ${bar}`} />
                 </div>
@@ -479,7 +478,7 @@ export default function BrokersPage() {
                   <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider hidden md:table-cell">
+                  <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">
                     Progress
                   </th>
                   <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider hidden md:table-cell">
@@ -504,13 +503,12 @@ export default function BrokersPage() {
                   </tr>
                 ) : (
                   filtered.map((broker) => {
-                    const cfg = STAGE_CONFIG[broker.stage];
+                    const cfg = STATUS_CONFIG[broker.status];
                     const StatusIcon = cfg.icon;
-                    const isMonitoring = broker.stage === "monitoring";
-                    const isRemoved = broker.stage === "removed";
-                    const isFound = broker.stage === "found";
-                    const isPending =
-                      broker.stage === "submitted" || broker.stage === "processing";
+                    const isMonitoring = broker.status === "monitoring";
+                    const isRemoved = broker.status === "removed";
+                    const isFound = broker.status === "found";
+                    const isPending = broker.status === "requested";
 
                     return (
                       <React.Fragment key={broker.id}>
@@ -540,16 +538,14 @@ export default function BrokersPage() {
                               </span>
                             </div>
                           </td>
-                          <td className="p-4 hidden md:table-cell">
-                            <StageProgressBar stage={broker.stage} />
+                          <td className="p-4 hidden lg:table-cell">
+                            <ProgressDots status={broker.status} />
                           </td>
                           <td className="p-4 text-sm text-white/40 hidden md:table-cell">
                             {broker.dateFound}
                           </td>
                           <td className="p-4 text-sm text-white/40 hidden lg:table-cell">
-                            {broker.dateRemoved ?? (
-                              <span className="text-white/20">—</span>
-                            )}
+                            {broker.dateRemoved ?? <span className="text-white/20">—</span>}
                           </td>
                           <td className="p-4 text-sm text-white/60">{broker.recordsFound}</td>
                           <td className="p-4">
@@ -566,7 +562,7 @@ export default function BrokersPage() {
                                   className="text-xs whitespace-nowrap"
                                 >
                                   <Clock className="w-3 h-3 mr-1" />
-                                  {broker.stage === "processing" ? "Processing" : "Pending"}
+                                  Pending
                                 </Button>
                               )}
                               {(isRemoved || isMonitoring) && (
@@ -574,15 +570,16 @@ export default function BrokersPage() {
                                   size="sm"
                                   variant="outline"
                                   className="text-xs whitespace-nowrap border-green-700/40 text-green-400 hover:bg-green-950/40 hover:text-green-300"
-                                  onClick={() => setCertificateBrokerId(broker.id)}
+                                  onClick={() => setCertBroker(broker)}
                                 >
                                   <FileText className="w-3 h-3 mr-1" />
-                                  Certificate
+                                  📄 Cert
                                 </Button>
                               )}
                             </div>
                           </td>
                         </tr>
+
                         {/* Monitoring sub-row */}
                         {isMonitoring && broker.lastChecked && (
                           <tr className="border-b border-white/5 last:border-0">
@@ -611,10 +608,7 @@ export default function BrokersPage() {
       {/* ── Certificate Modal ── */}
       <AnimatePresence>
         {certBroker && (
-          <CertificateModal
-            broker={certBroker}
-            onClose={() => setCertificateBrokerId(null)}
-          />
+          <CertificateModal broker={certBroker} onClose={() => setCertBroker(null)} />
         )}
       </AnimatePresence>
     </div>
