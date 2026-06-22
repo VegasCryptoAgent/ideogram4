@@ -259,14 +259,21 @@ export default function LandingPage() {
           </Link>
 
           <div className="hidden md:flex items-center gap-7">
-            {(["Features", "Resources", "Pricing", "Enterprise", "About"] as string[]).map((label) => (
-              <a
+            {(
+              [
+                { label: "Features", href: "/features" },
+                { label: "Blog", href: "/blog" },
+                { label: "Pricing", href: "/plans" },
+                { label: "About", href: "/about" },
+              ] as { label: string; href: string }[]
+            ).map(({ label, href }) => (
+              <Link
                 key={label}
-                href={label === "Pricing" ? "#pricing" : label === "Features" ? "#features" : "#"}
+                href={href}
                 className="text-sm text-[#1A1A14]/65 hover:text-[#1A1A14] transition-colors font-medium"
               >
                 {label}
-              </a>
+              </Link>
             ))}
           </div>
 
@@ -286,10 +293,15 @@ export default function LandingPage() {
 
         {mobileOpen && (
           <div className="md:hidden bg-[#F5F2EC] border-t border-[#D4CFC5] px-4 pb-4">
-            {["Features", "Pricing", "Enterprise", "About"].map((label) => (
-              <a key={label} href="#" className="block py-3 text-sm font-medium text-[#1A1A14]/70 border-b border-[#D4CFC5] last:border-0" onClick={() => setMobileOpen(false)}>
+            {[
+              { label: "Features", href: "/features" },
+              { label: "Pricing", href: "/plans" },
+              { label: "Blog", href: "/blog" },
+              { label: "About", href: "/about" },
+            ].map(({ label, href }) => (
+              <Link key={label} href={href} className="block py-3 text-sm font-medium text-[#1A1A14]/70 border-b border-[#D4CFC5] last:border-0" onClick={() => setMobileOpen(false)}>
                 {label}
-              </a>
+              </Link>
             ))}
             <div className="flex gap-3 pt-4">
               <Link href="/sign-in" className="flex-1 text-center py-2.5 border border-[#1A1A14]/25 rounded-full text-sm font-medium text-[#1A1A14]">Login</Link>
@@ -745,16 +757,48 @@ export default function LandingPage() {
           {/* Links */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 py-10 border-b border-white/8">
             {[
-              { heading: "Product", links: ["Pricing", "Features", "Scan", "Security", "Status"] },
-              { heading: "Company", links: ["Team", "Blog", "Affiliates", "Contact", "Careers", "Changelog"] },
-              { heading: "Download", links: ["App Store", "Play Store", "Extension", "Whitepaper"] },
-              { heading: "Connect", links: ["Instagram", "TikTok", "YouTube", "Facebook", "LinkedIn"] },
-              { heading: "Legal", links: ["Privacy Policy", "Terms of Service", "Prohibited Use Policy"] },
+              { heading: "Product", links: [
+                { label: "Pricing", href: "/plans" },
+                { label: "Features", href: "/features" },
+                { label: "Get Started", href: "/get-started" },
+                { label: "Trust & Security", href: "/trust" },
+                { label: "Status", href: "#" },
+              ]},
+              { heading: "Company", links: [
+                { label: "About", href: "/about" },
+                { label: "Blog", href: "/blog" },
+                { label: "Affiliates", href: "/affiliate-program" },
+                { label: "Contact", href: "/contact-us" },
+                { label: "Careers", href: "#" },
+                { label: "Changelog", href: "/changelog" },
+              ]},
+              { heading: "Download", links: [
+                { label: "App Store", href: "#" },
+                { label: "Play Store", href: "#" },
+                { label: "Extension", href: "#" },
+                { label: "Whitepaper", href: "#" },
+              ]},
+              { heading: "Connect", links: [
+                { label: "Instagram", href: "#" },
+                { label: "TikTok", href: "#" },
+                { label: "YouTube", href: "#" },
+                { label: "Facebook", href: "#" },
+                { label: "LinkedIn", href: "#" },
+              ]},
+              { heading: "Legal", links: [
+                { label: "Privacy Policy", href: "#" },
+                { label: "Terms of Service", href: "#" },
+                { label: "Prohibited Use Policy", href: "#" },
+              ]},
             ].map(({ heading, links }) => (
               <div key={heading}>
                 <div className="text-white/55 text-xs font-semibold mb-3 uppercase tracking-wide">{heading}</div>
                 <ul className="space-y-2">
-                  {links.map((l) => <li key={l}><a href="#" className="text-white/30 text-xs hover:text-white/60 transition-colors">{l}</a></li>)}
+                  {links.map(({ label, href }) => (
+                    <li key={label}>
+                      <Link href={href} className="text-white/30 text-xs hover:text-white/60 transition-colors">{label}</Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
             ))}
