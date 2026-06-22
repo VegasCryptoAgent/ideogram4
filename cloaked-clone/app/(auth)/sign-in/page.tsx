@@ -3,9 +3,11 @@
 import React, { useState, useTransition } from "react";
 import { Eye, EyeOff, Mail, Lock, Shield } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signInAction } from "@/app/actions/auth";
 
 export default function SignInPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +23,12 @@ export default function SignInPage() {
     }
     startTransition(async () => {
       const result = await signInAction(email, password);
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+      } else if (result?.success) {
+        router.push("/dashboard");
+        router.refresh();
+      }
     });
   };
 

@@ -16,7 +16,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from './lib/auth';
+import NextAuth from 'next-auth';
+import { authConfig } from './lib/auth.config';
+
+// Edge-safe Auth.js instance — does NOT import Prisma or bcrypt, so it can
+// run in the middleware (Edge) runtime without crashing.
+const { auth } = NextAuth(authConfig);
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 

@@ -3,17 +3,10 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { authConfig } from "./auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // PrismaAdapter is intentionally omitted: JWT strategy + CredentialsProvider
-  // don't need it and it causes silent sign-in failures.
-  session: {
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/sign-in",
-    error: "/sign-in",
-  },
+  ...authConfig,
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -51,7 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: user.image,
           };
         } catch (err) {
-          console.error('[Auth] authorize error:', err);
+          console.error("[Auth] authorize error:", err);
           return null;
         }
       },
@@ -67,41 +60,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
   ],
   callbacks: {
+    ...authConfig.callbacks,
+    // Node-runtime JWT callback: loads plan info from the DB at sign-in.
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        token.id = user.id;
+        token.id = (user as { id?: string }).id;
+        // Load plan/subscription info once, at sign-in (Node runtime).
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { planId: true, subscriptionStatus: true },
+          });
+          if (dbUser) {
+            token.planId = dbUser.planId;
+            token.subscriptionStatus = dbUser.subscriptionStatus;
+          }
+        } catch (err) {
+          console.error("[Auth] jwt plan load error:", err);
+        }
       }
 
-      // Refresh plan/subscription info when session is updated
       if (trigger === "update" && session?.planId) {
         token.planId = session.planId;
         token.subscriptionStatus = session.subscriptionStatus;
       }
 
-      // On initial sign-in, load plan from database
-      if (token.id && !token.planId) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { planId: true, subscriptionStatus: true },
-        });
-        if (dbUser) {
-          token.planId = dbUser.planId;
-          token.subscriptionStatus = dbUser.subscriptionStatus;
-        }
-      }
-
       return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        // Expose plan info to client session
-        (session.user as typeof session.user & { planId?: string; subscriptionStatus?: string }).planId =
-          token.planId as string | undefined;
-        (session.user as typeof session.user & { planId?: string; subscriptionStatus?: string }).subscriptionStatus =
-          token.subscriptionStatus as string | undefined;
-      }
-      return session;
     },
   },
 });
