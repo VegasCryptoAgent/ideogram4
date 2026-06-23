@@ -167,9 +167,9 @@ export default function DashboardPage() {
 
       // Email aliases
       if (results[4].status === "fulfilled") {
-        const d = results[4].value?.data ?? results[4].value?.success && results[4].value;
-        const arr = Array.isArray(d) ? d : (results[4].value?.data ?? []);
-        if (Array.isArray(arr)) setAliases(arr.slice(0, 3));
+        const raw4 = results[4].value;
+        const arr4 = Array.isArray(raw4) ? raw4 : (raw4?.data ?? []);
+        if (Array.isArray(arr4)) setAliases(arr4.slice(0, 3));
       }
 
       // Virtual phones
