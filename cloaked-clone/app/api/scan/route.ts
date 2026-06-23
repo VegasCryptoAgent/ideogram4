@@ -2,6 +2,7 @@
 // Shielded Privacy App — Scan Trigger/Status API
 // POST /api/scan → trigger new scan
 // GET  /api/scan → get latest scan status
+// GET  /api/scan?all=true → get scan history (last 10 jobs)
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -72,11 +73,23 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
 
 // ── GET /api/scan ─────────────────────────────────────────────
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getAuthenticatedUser();
   if (!session) return errorResponse('Unauthorized', 401);
 
+  const { searchParams } = new URL(req.url);
+  const all = searchParams.get('all') === 'true';
+
   try {
+    if (all) {
+      const jobs = await prisma.scanJob.findMany({
+        where: { userId: session.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      return successResponse({ jobs });
+    }
+
     const latestJob = await prisma.scanJob.findFirst({
       where: { userId: session.id },
       orderBy: { createdAt: 'desc' },

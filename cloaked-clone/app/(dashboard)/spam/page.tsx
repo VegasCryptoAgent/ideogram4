@@ -1,53 +1,161 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Shield, ShieldOff, Phone, Mail, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-const recentBlocked = [
-  { id: '1', from: '+1 (800) 555-0192', type: 'call', reason: 'Known robocall', blockedAt: '2 hours ago' },
-  { id: '2', from: 'spam@deals4you.net', type: 'email', reason: 'Spam pattern', blockedAt: '5 hours ago' },
-  { id: '3', from: '+1 (900) 123-4567', type: 'call', reason: 'Premium rate number', blockedAt: '1 day ago' },
-  { id: '4', from: 'noreply@phishing-site.com', type: 'email', reason: 'Phishing detected', blockedAt: '1 day ago' },
-  { id: '5', from: '+1 (844) 987-6543', type: 'call', reason: 'Telemarketer', blockedAt: '2 days ago' },
-]
+// Suppress unused import lint
+void ShieldOff
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+function sensitivityToSlider(s: string) {
+  return s === 'low' ? 16 : s === 'high' ? 83 : 50
+}
+
+function sliderToSensitivity(v: number): 'low' | 'medium' | 'high' {
+  return v <= 33 ? 'low' : v <= 66 ? 'medium' : 'high'
+}
 
 export default function SpamPage() {
   const [blockUnknown, setBlockUnknown] = useState(false)
   const [blockRobocalls, setBlockRobocalls] = useState(true)
   const [sensitivity, setSensitivity] = useState([50])
-  const [whitelist, setWhitelist] = useState(['+1 (555) 234-5678', 'doctor@myhealth.com'])
-  const [blacklist, setBlacklist] = useState(['+1 (800) 555-9999'])
+  const [whitelist, setWhitelist] = useState<string[]>([])
+  const [blacklist, setBlacklist] = useState<string[]>([])
   const [newWhitelistItem, setNewWhitelistItem] = useState('')
   const [newBlacklistItem, setNewBlacklistItem] = useState('')
+  const [stats, setStats] = useState({ totalSpamCallsBlocked: 0, totalSpamEmailsBlocked: 0, totalBlocked: 0 })
+  const [recentBlocked, setRecentBlocked] = useState<{ id: string; from: string; type: 'call' | 'email'; reason: string; blockedAt: string }[]>([])
+  const [saving, setSaving] = useState(false)
+  const sensitivityTimer = useRef<NodeJS.Timeout | null>(null)
 
-  const sensitivityLabel =
-    sensitivity[0] <= 33 ? 'Low' : sensitivity[0] <= 66 ? 'Medium' : 'High'
+  const fetchAll = useCallback(async () => {
+    const [settingsRes, statsRes] = await Promise.allSettled([
+      fetch('/api/spam/settings').then((r) => r.json()),
+      fetch('/api/spam/stats').then((r) => r.json()),
+    ])
+
+    if (settingsRes.status === 'fulfilled') {
+      const d = settingsRes.value?.data ?? settingsRes.value
+      if (d) {
+        setBlockUnknown(d.blockUnknownCallers ?? false)
+        setBlockRobocalls(d.blockRobocalls ?? true)
+        setSensitivity([sensitivityToSlider(d.spamSensitivity ?? 'medium')])
+        setWhitelist(d.whitelist ?? [])
+        setBlacklist(d.blacklist ?? [])
+      }
+    }
+
+    if (statsRes.status === 'fulfilled') {
+      const d = statsRes.value?.data ?? statsRes.value
+      if (d?.summary) setStats(d.summary)
+      if (d?.recentBlocked?.calls) {
+        setRecentBlocked(
+          d.recentBlocked.calls.slice(0, 5).map((c: any) => ({
+            id: c.id,
+            from: c.from,
+            type: 'call' as const,
+            reason: c.spamScore != null ? `Spam score ${Math.round(c.spamScore * 100)}%` : 'Spam detected',
+            blockedAt: timeAgo(c.createdAt),
+          }))
+        )
+      }
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  async function saveSettings(patch: Partial<{ blockUnknownCallers: boolean; blockRobocalls: boolean; spamSensitivity: string }>) {
+    setSaving(true)
+    await fetch('/api/spam/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).catch(() => {})
+    setSaving(false)
+  }
+
+  function handleBlockUnknown(v: boolean) {
+    setBlockUnknown(v)
+    saveSettings({ blockUnknownCallers: v })
+  }
+
+  function handleBlockRobocalls(v: boolean) {
+    setBlockRobocalls(v)
+    saveSettings({ blockRobocalls: v })
+  }
+
+  function handleSensitivityChange(v: number[]) {
+    setSensitivity(v)
+    if (sensitivityTimer.current) clearTimeout(sensitivityTimer.current)
+    sensitivityTimer.current = setTimeout(() => {
+      saveSettings({ spamSensitivity: sliderToSensitivity(v[0]) })
+    }, 800)
+  }
+
+  async function addToWhitelist() {
+    const contact = newWhitelistItem.trim()
+    if (!contact || whitelist.includes(contact)) return
+    setWhitelist((prev) => [...prev, contact])
+    setNewWhitelistItem('')
+    await fetch('/api/spam/whitelist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact }),
+    }).catch(() => {})
+  }
+
+  async function removeFromWhitelist(contact: string) {
+    setWhitelist((prev) => prev.filter((i) => i !== contact))
+    await fetch('/api/spam/whitelist', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact }),
+    }).catch(() => {})
+  }
+
+  async function addToBlacklist() {
+    const contact = newBlacklistItem.trim()
+    if (!contact || blacklist.includes(contact)) return
+    setBlacklist((prev) => [...prev, contact])
+    setNewBlacklistItem('')
+    await fetch('/api/spam/blacklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact }),
+    }).catch(() => {})
+  }
+
+  async function removeFromBlacklist(contact: string) {
+    setBlacklist((prev) => prev.filter((i) => i !== contact))
+    await fetch('/api/spam/blacklist', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contact }),
+    }).catch(() => {})
+  }
+
+  const sensitivityLabel = sensitivity[0] <= 33 ? 'Low' : sensitivity[0] <= 66 ? 'Medium' : 'High'
   const sensitivityDesc =
     sensitivity[0] <= 33
       ? 'Only blocks confirmed spam. May let some spam through.'
       : sensitivity[0] <= 66
       ? 'Balanced filtering. Recommended for most users.'
       : 'Aggressive filtering. May occasionally block legitimate contacts.'
-
-  function addToWhitelist() {
-    if (!newWhitelistItem.trim()) return
-    setWhitelist((prev) => [...prev, newWhitelistItem.trim()])
-    setNewWhitelistItem('')
-  }
-
-  function addToBlacklist() {
-    if (!newBlacklistItem.trim()) return
-    setBlacklist((prev) => [...prev, newBlacklistItem.trim()])
-    setNewBlacklistItem('')
-  }
 
   return (
     <div className="space-y-6">
@@ -67,7 +175,7 @@ export default function SpamPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-400">Calls Blocked</p>
-              <p className="text-2xl font-bold text-white">247</p>
+              <p className="text-2xl font-bold text-white">{stats.totalSpamCallsBlocked}</p>
             </div>
           </CardContent>
         </Card>
@@ -78,7 +186,7 @@ export default function SpamPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-400">Emails Blocked</p>
-              <p className="text-2xl font-bold text-white">131</p>
+              <p className="text-2xl font-bold text-white">{stats.totalSpamEmailsBlocked}</p>
             </div>
           </CardContent>
         </Card>
@@ -88,8 +196,8 @@ export default function SpamPage() {
               <Shield className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-zinc-400">This Month</p>
-              <p className="text-2xl font-bold text-white">38</p>
+              <p className="text-sm text-zinc-400">Total Blocked</p>
+              <p className="text-2xl font-bold text-white">{stats.totalBlocked}</p>
             </div>
           </CardContent>
         </Card>
@@ -112,7 +220,7 @@ export default function SpamPage() {
                   Block all calls not in your contacts
                 </p>
               </div>
-              <Switch checked={blockUnknown} onCheckedChange={setBlockUnknown} />
+              <Switch checked={blockUnknown} onCheckedChange={handleBlockUnknown} />
             </div>
             {blockUnknown && (
               <div className="bg-yellow-950/30 border border-yellow-700/30 rounded-lg p-3 flex gap-2 text-xs text-yellow-300">
@@ -128,7 +236,7 @@ export default function SpamPage() {
                   Auto-detect and block automated callers
                 </p>
               </div>
-              <Switch checked={blockRobocalls} onCheckedChange={setBlockRobocalls} />
+              <Switch checked={blockRobocalls} onCheckedChange={handleBlockRobocalls} />
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -147,7 +255,7 @@ export default function SpamPage() {
               </div>
               <Slider
                 value={sensitivity}
-                onValueChange={setSensitivity}
+                onValueChange={handleSensitivityChange}
                 min={0}
                 max={100}
                 step={1}
@@ -155,7 +263,7 @@ export default function SpamPage() {
               />
               <p className="text-xs text-zinc-500">{sensitivityDesc}</p>
             </div>
-            <Button className="w-full bg-violet-600 hover:bg-violet-700">Save Settings</Button>
+            {saving && <p className="text-xs text-zinc-500">Saving…</p>}
           </CardContent>
         </Card>
 
@@ -164,33 +272,31 @@ export default function SpamPage() {
           <CardHeader>
             <CardTitle className="text-white text-lg">Recently Blocked</CardTitle>
             <CardDescription className="text-zinc-400">
-              Last 5 blocked calls and emails.
+              Last blocked spam calls detected on your virtual numbers.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentBlocked.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 p-3 rounded-lg bg-white/5"
-              >
+            {recentBlocked.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-8">
+                No blocked calls yet — spam logs will appear here once your virtual numbers receive calls.
+              </p>
+            ) : (
+              recentBlocked.map((item) => (
                 <div
-                  className={`p-2 rounded-lg ${
-                    item.type === 'call' ? 'bg-red-500/20' : 'bg-orange-500/20'
-                  }`}
+                  key={item.id}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-white/5"
                 >
-                  {item.type === 'call' ? (
+                  <div className="p-2 rounded-lg bg-red-500/20">
                     <Phone className="w-4 h-4 text-red-400" />
-                  ) : (
-                    <Mail className="w-4 h-4 text-orange-400" />
-                  )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{item.from}</p>
+                    <p className="text-xs text-zinc-500">{item.reason}</p>
+                  </div>
+                  <span className="text-xs text-zinc-600 shrink-0">{item.blockedAt}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{item.from}</p>
-                  <p className="text-xs text-zinc-500">{item.reason}</p>
-                </div>
-                <span className="text-xs text-zinc-600 shrink-0">{item.blockedAt}</span>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
@@ -235,7 +341,7 @@ export default function SpamPage() {
                   >
                     <span className="text-sm text-white">{item}</span>
                     <button
-                      onClick={() => setWhitelist((prev) => prev.filter((i) => i !== item))}
+                      onClick={() => removeFromWhitelist(item)}
                       className="text-zinc-600 hover:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -279,7 +385,7 @@ export default function SpamPage() {
                   >
                     <span className="text-sm text-white">{item}</span>
                     <button
-                      onClick={() => setBlacklist((prev) => prev.filter((i) => i !== item))}
+                      onClick={() => removeFromBlacklist(item)}
                       className="text-zinc-600 hover:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
