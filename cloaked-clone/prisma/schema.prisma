@@ -42,6 +42,7 @@ model User {
   breachAlerts    BreachAlert[]
   scanJobs        ScanJob[]
   passwordEntries PasswordEntry[]
+  virtualCards    VirtualCard[]
 }
 
 model UserAddress {
@@ -213,6 +214,17 @@ model PasswordEntry {
   sharedVaultId     String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model VirtualCard {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  color     String   @default("blue")
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }

@@ -15,6 +15,8 @@ import {
   Lock,
   CheckCircle,
   XCircle,
+  Copy,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,57 +49,15 @@ interface VirtualCard {
   transactions: Transaction[];
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── New card reveal data (pan+cvv only available at creation time) ───────────
 
-const MOCK_CARDS: VirtualCard[] = [
-  {
-    id: "1",
-    nickname: "Amazon Shopping",
-    lastFour: "4421",
-    merchant: "Amazon",
-    type: "merchant-locked",
-    limit: 50,
-    spent: 23.47,
-    status: "active",
-    createdAt: "2025-01-10",
-    color: "blue",
-    transactions: [
-      { id: "t1", merchant: "Amazon", amount: 9.99, date: "Jan 20, 2025", status: "approved" },
-      { id: "t2", merchant: "Amazon", amount: 7.49, date: "Jan 15, 2025", status: "approved" },
-      { id: "t3", merchant: "Amazon", amount: 5.99, date: "Jan 12, 2025", status: "approved" },
-      { id: "t4", merchant: "Walmart", amount: 34.00, date: "Jan 10, 2025", status: "blocked" },
-    ],
-  },
-  {
-    id: "2",
-    nickname: "Subscription Guard",
-    lastFour: "8834",
-    merchant: null,
-    type: "multi-use",
-    limit: 15,
-    spent: 9.99,
-    status: "active",
-    createdAt: "2025-02-01",
-    color: "purple",
-    transactions: [
-      { id: "t5", merchant: "Spotify", amount: 9.99, date: "Feb 1, 2025", status: "approved" },
-      { id: "t6", merchant: "Netflix", amount: 15.99, date: "Jan 28, 2025", status: "approved" },
-    ],
-  },
-  {
-    id: "3",
-    nickname: "Trial Blocker",
-    lastFour: "2291",
-    merchant: null,
-    type: "single-use",
-    limit: 1,
-    spent: 0,
-    status: "frozen",
-    createdAt: "2025-03-15",
-    color: "gray",
-    transactions: [],
-  },
-];
+interface NewCardDetails {
+  pan: string
+  cvv: string
+  expMonth: string
+  expYear: string
+  nickname: string
+}
 
 // ─── Color Helpers ─────────────────────────────────────────────────────────
 
@@ -422,10 +382,10 @@ const COLOR_OPTIONS = [
 
 function CreateCardModal({
   onClose,
-  onCreate,
+  onSubmit,
 }: {
   onClose: () => void;
-  onCreate: (card: VirtualCard) => void;
+  onSubmit: (data: { nickname: string; type: VirtualCard["type"]; limit: number; hostname?: string; color: string }) => Promise<void>;
 }) {
   const [nickname, setNickname] = useState("");
   const [cardType, setCardType] = useState<VirtualCard["type"]>("merchant-locked");
@@ -433,6 +393,10 @@ function CreateCardModal({
   const [limit, setLimit] = useState("50");
   const [autoFreeze, setAutoFreeze] = useState(false);
   const [selectedColor, setSelectedColor] = useState("blue");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Suppress unused var lint
+  void autoFreeze;
 
   const previewCard: VirtualCard = {
     id: "preview",
@@ -448,15 +412,20 @@ function CreateCardModal({
     transactions: [],
   };
 
-  const handleCreate = () => {
-    const newCard: VirtualCard = {
-      ...previewCard,
-      id: String(Date.now()),
-      lastFour: String(Math.floor(1000 + Math.random() * 9000)),
-      nickname: nickname || "New Card",
-    };
-    onCreate(newCard);
-    onClose();
+  const handleCreate = async () => {
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        nickname: nickname || "New Card",
+        type: cardType,
+        limit: parseFloat(limit) || 50,
+        hostname: cardType === "merchant-locked" && merchantName ? merchantName : undefined,
+        color: selectedColor,
+      });
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -602,9 +571,9 @@ function CreateCardModal({
           >
             Cancel
           </Button>
-          <Button className="flex-1 bg-white text-black hover:bg-white/90 font-semibold" onClick={handleCreate}>
+          <Button className="flex-1 bg-white text-black hover:bg-white/90 font-semibold" onClick={handleCreate} disabled={submitting}>
             <CreditCard className="w-4 h-4 mr-1.5" />
-            Create Card
+            {submitting ? "Creating…" : "Create Card"}
           </Button>
         </div>
       </motion.div>
@@ -612,18 +581,166 @@ function CreateCardModal({
   );
 }
 
+// ─── New Card Reveal Modal ────────────────────────────────────────────────────
+
+function NewCardRevealModal({
+  details,
+  onClose,
+}: {
+  details: NewCardDetails
+  onClose: () => void
+}) {
+  const [revealPan, setRevealPan] = useState(false)
+  const [revealCvv, setRevealCvv] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).catch(() => {})
+    setCopied(label)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const exp = `${details.expMonth}/${String(details.expYear).slice(-2)}`
+
+  return (
+    <motion.div
+      key="new-card-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.2 }}
+        className="relative w-full max-w-sm bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/10">
+          <div>
+            <h2 className="text-lg font-bold text-white">Card Created!</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">{details.nickname}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="flex items-start gap-3 bg-amber-950/40 border border-amber-700/40 rounded-xl p-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300 leading-relaxed">
+              Save these details now — the full card number will not be shown again.
+            </p>
+          </div>
+
+          {/* Card Number */}
+          <div className="bg-white/5 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-zinc-500 mb-0.5">Card Number</div>
+                <div className="font-mono text-sm text-white">
+                  {revealPan ? details.pan : `•••• •••• •••• ${details.pan.slice(-4)}`}
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setRevealPan((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                >
+                  {revealPan ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => copy(details.pan, 'pan')}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copied === 'pan' ? 'Copied!' : ''}
+                </button>
+              </div>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-zinc-500 mb-0.5">CVV</div>
+                <div className="font-mono text-sm text-white">{revealCvv ? details.cvv : '•••'}</div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setRevealCvv((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                >
+                  {revealCvv ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => copy(details.cvv, 'cvv')}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copied === 'cvv' ? 'Copied!' : ''}
+                </button>
+              </div>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-zinc-500 mb-0.5">Expiry</div>
+                <div className="font-mono text-sm text-white">{exp}</div>
+              </div>
+              <button
+                onClick={() => copy(exp, 'exp')}
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                {copied === 'exp' ? 'Copied!' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-5">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-white/90 transition-colors"
+          >
+            Done — I&apos;ve saved my card details
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CardsPage() {
-  const [cards, setCards] = useState<VirtualCard[]>(MOCK_CARDS);
+  const [cards, setCards] = useState<VirtualCard[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<VirtualCard | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [revealedNumbers] = useState<Set<string>>(new Set());
-  const [revealedCVVs] = useState<Set<string>>(new Set());
+  const [newCardDetails, setNewCardDetails] = useState<NewCardDetails | null>(null);
 
-  // Suppress unused var lint — state kept for extensibility
-  void revealedNumbers;
-  void revealedCVVs;
+  const mapApiCard = (c: any): VirtualCard => ({
+    id: c.id,
+    nickname: c.nickname ?? `Card •••• ${c.lastFour}`,
+    type: (c.type ?? 'multi-use') as VirtualCard['type'],
+    lastFour: c.lastFour,
+    status: (c.frozen ? 'frozen' : 'active') as VirtualCard['status'],
+    limit: c.spendLimit ? c.spendLimit / 100 : 0,
+    spent: 0,
+    merchant: c.hostname ?? null,
+    transactions: [],
+    color: c.color ?? 'blue',
+    createdAt: new Date().toISOString().split('T')[0],
+  });
 
   const fetchCards = useCallback(async () => {
     try {
@@ -631,24 +748,10 @@ export default function CardsPage() {
       if (!res.ok) return
       const json = await res.json()
       const raw: any[] = json.data ?? []
-      if (raw.length > 0) {
-        setCards(raw.map((c) => ({
-          id: c.id,
-          nickname: c.nickname ?? `Card •••• ${c.last4}`,
-          type: 'merchant-locked' as VirtualCard['type'],
-          lastFour: c.last4,
-          expiry: `${String(c.expMonth).padStart(2,'0')}/${String(c.expYear).slice(-2)}`,
-          cvv: '•••',
-          status: (c.frozen ? 'frozen' : 'active') as VirtualCard['status'],
-          limit: c.spendingLimit ? c.spendingLimit / 100 : 500,
-          spent: 0,
-          merchant: c.merchant ?? null,
-          transactions: [],
-          color: 'blue',
-          createdAt: new Date().toISOString().split('T')[0],
-        })))
-      }
-    } catch { /* keep mock data */ }
+      setCards(raw.map(mapApiCard))
+    } catch { /* leave empty */ } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchCards() }, [fetchCards])
@@ -665,15 +768,11 @@ export default function CardsPage() {
     const nowFrozen = card?.status !== 'frozen'
     setCards((prev) =>
       prev.map((c) =>
-        c.id === id
-          ? { ...c, status: nowFrozen ? 'frozen' : 'active' }
-          : c
+        c.id === id ? { ...c, status: nowFrozen ? 'frozen' : 'active' } : c
       )
     );
     setSelectedCard((prev) =>
-      prev && prev.id === id
-        ? { ...prev, status: nowFrozen ? 'frozen' : 'active' }
-        : prev
+      prev && prev.id === id ? { ...prev, status: nowFrozen ? 'frozen' : 'active' } : prev
     );
     fetch('/api/cards', {
       method: 'PATCH',
@@ -682,13 +781,48 @@ export default function CardsPage() {
     }).catch(() => {})
   };
 
-  const deleteCard = (id: string) => {
+  const deleteCard = async (id: string) => {
     setCards((prev) => prev.filter((c) => c.id !== id));
     if (selectedCard?.id === id) setSelectedCard(null);
+    await fetch(`/api/cards/${id}`, { method: 'DELETE' }).catch(() => {})
   };
 
-  const createCard = (card: VirtualCard) => {
-    setCards((prev) => [...prev, card]);
+  const handleCreateCard = async (data: {
+    nickname: string;
+    type: VirtualCard['type'];
+    limit: number;
+    hostname?: string;
+    color: string;
+  }) => {
+    try {
+      const res = await fetch('/api/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nickname: data.nickname,
+          type: data.type,
+          spendLimit: data.limit,
+          hostname: data.hostname,
+          color: data.color,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to create card')
+      const json = await res.json()
+      const c = json.data
+      setCards((prev) => [mapApiCard(c), ...prev])
+      if (c.pan) {
+        setNewCardDetails({
+          pan: c.pan,
+          cvv: c.cvv ?? '•••',
+          expMonth: String(c.expMonth ?? '').padStart(2, '0'),
+          expYear: String(c.expYear ?? ''),
+          nickname: c.nickname ?? data.nickname,
+        })
+      }
+    } catch (err) {
+      console.error('[CreateCard]', err)
+      throw err
+    }
   };
 
   // Keep selectedCard in sync with cards array mutations
@@ -747,7 +881,14 @@ export default function CardsPage() {
       </div>
 
       {/* ── Cards Grid ── */}
-      {cards.length === 0 ? (
+      {loading ? (
+        <Card className="border-white/10 bg-white/5">
+          <CardContent className="py-16 text-center">
+            <CreditCard className="w-16 h-16 text-white/10 mx-auto mb-4 animate-pulse" />
+            <p className="text-zinc-500 text-sm">Loading your cards…</p>
+          </CardContent>
+        </Card>
+      ) : cards.length === 0 ? (
         <Card className="border-white/10 bg-white/5">
           <CardContent className="py-16 text-center">
             <CreditCard className="w-16 h-16 text-white/10 mx-auto mb-4" />
@@ -886,7 +1027,16 @@ export default function CardsPage() {
         {showCreateModal && (
           <CreateCardModal
             onClose={() => setShowCreateModal(false)}
-            onCreate={createCard}
+            onSubmit={handleCreateCard}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {newCardDetails && (
+          <NewCardRevealModal
+            details={newCardDetails}
+            onClose={() => setNewCardDetails(null)}
           />
         )}
       </AnimatePresence>
