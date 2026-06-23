@@ -1,14 +1,14 @@
 /**
  * BullMQ queue instances and job-helper functions for Shielded.
  *
- * All four queues share the same ioredis connection but are logically
- * separated so each worker can scale independently.
+ * Queues are lazily instantiated so that importing this module during
+ * Next.js static build (when Redis is unavailable) does not throw.
  */
 
 import { Queue } from 'bullmq';
 
-// BullMQ requires connection options, not a raw ioredis instance.
-// Parse REDIS_URL if set (Railway injects this); fall back to individual vars.
+// ─── Redis connection ─────────────────────────────────────────────────────────
+
 function buildRedisConnection() {
   const url = process.env.REDIS_URL;
   if (url) {
@@ -27,51 +27,82 @@ function buildRedisConnection() {
     maxRetriesPerRequest: null as null,
   };
 }
+
 export const redisConnection = buildRedisConnection();
 
-// ─── Queue instances ──────────────────────────────────────────────────────────
+// ─── Lazy queue singletons ────────────────────────────────────────────────────
 
-export const scanQueue = new Queue('scan-queue', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 5_000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 50 },
-  },
-});
+let _scanQueue: Queue | null = null;
+let _optOutQueue: Queue | null = null;
+let _monitorQueue: Queue | null = null;
+let _notificationQueue: Queue | null = null;
 
-export const optOutQueue = new Queue('opt-out-queue', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 10_000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 50 },
-  },
-});
+function getScanQueue(): Queue {
+  if (!_scanQueue) {
+    _scanQueue = new Queue('scan-queue', {
+      connection: redisConnection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    });
+  }
+  return _scanQueue;
+}
 
-export const monitorQueue = new Queue('monitor-queue', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 30_000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 25 },
-  },
-});
+function getOptOutQueue(): Queue {
+  if (!_optOutQueue) {
+    _optOutQueue = new Queue('opt-out-queue', {
+      connection: redisConnection,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 10_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    });
+  }
+  return _optOutQueue;
+}
 
-export const notificationQueue = new Queue('notification-queue', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'fixed', delay: 3_000 },
-    removeOnComplete: { count: 200 },
-    removeOnFail: { count: 50 },
-  },
-});
+function getMonitorQueue(): Queue {
+  if (!_monitorQueue) {
+    _monitorQueue = new Queue('monitor-queue', {
+      connection: redisConnection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 25 },
+      },
+    });
+  }
+  return _monitorQueue;
+}
 
-// ─── Backward-compatible aliases (used by existing API routes) ────────────────
+function getNotificationQueue(): Queue {
+  if (!_notificationQueue) {
+    _notificationQueue = new Queue('notification-queue', {
+      connection: redisConnection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'fixed', delay: 3_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 50 },
+      },
+    });
+  }
+  return _notificationQueue;
+}
+
+// ─── Exported getters (backward-compatible with queue-as-value usage) ─────────
+
+export const scanQueue = { add: (...a: Parameters<Queue['add']>) => getScanQueue().add(...a) } as Queue;
+export const optOutQueue = { add: (...a: Parameters<Queue['add']>) => getOptOutQueue().add(...a) } as Queue;
+export const monitorQueue = { add: (...a: Parameters<Queue['add']>) => getMonitorQueue().add(...a) } as Queue;
+export const notificationQueue = { add: (...a: Parameters<Queue['add']>) => getNotificationQueue().add(...a) } as Queue;
 
 /** @deprecated Use scanQueue */
 export const scannerQueue = scanQueue;
@@ -102,53 +133,36 @@ export interface MonitorJobData {
   brokerId?: string;
 }
 
-// ─── Helper: enqueue a scan job ───────────────────────────────────────────────
+// ─── Helper: enqueue a scan job ──────────────────────────────────────────────
 
-/**
- * Adds a scan job to the scan-queue.
- * @param userId  The user whose profile should be scanned.
- * @param jobId   The ScanJob database record id.
- */
 export async function queueScanJob(userId: string, jobId: string): Promise<void> {
-  await scanQueue.add(
+  await getScanQueue().add(
     'scan',
     { userId, jobId } satisfies ScanJobData,
-    { jobId: `scan:${jobId}` }, // deduplicate by DB job id
+    { jobId: `scan:${jobId}` },
   );
 }
 
 // ─── Helper: enqueue an opt-out job ──────────────────────────────────────────
 
-/**
- * Adds an opt-out job to the opt-out-queue.
- * @param userId    The user requesting removal.
- * @param brokerId  The DataBroker id.
- * @param recordId  The BrokerRecord id.
- */
 export async function queueOptOutJob(
   userId: string,
   brokerId: string,
   recordId: string,
 ): Promise<void> {
-  await optOutQueue.add(
+  await getOptOutQueue().add(
     'opt-out',
     { userId, brokerId, recordId } satisfies OptOutJobData,
-    { jobId: `optout:${recordId}` }, // one in-flight opt-out per record
+    { jobId: `optout:${recordId}` },
   );
 }
 
 // ─── Helper: enqueue a notification job ──────────────────────────────────────
 
-/**
- * Adds a notification job to the notification-queue.
- * @param type    Template name (e.g. 'welcome', 'scan_complete').
- * @param userId  Recipient user id.
- * @param data    Template-specific payload.
- */
 export async function queueNotificationJob(
   type: string,
   userId: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  await notificationQueue.add('notification', { type, userId, data } satisfies NotificationJobData);
+  await getNotificationQueue().add('notification', { type, userId, data } satisfies NotificationJobData);
 }
