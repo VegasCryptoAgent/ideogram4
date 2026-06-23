@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Mail,
@@ -16,6 +17,7 @@ import {
   ChevronRight,
   Check,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +37,20 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Shape returned by GET /api/email-aliases (matches Prisma EmailAlias model) */
+interface ApiEmailAlias {
+  id: string;
+  alias: string;
+  label: string | null;
+  forwardTo: string;
+  isActive: boolean;
+  spamBlocked: number;      // Prisma field name
+  emailsReceived: number;   // Prisma field name
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** UI-facing shape (mapped from API) */
 interface EmailAlias {
   id: string;
   alias: string;
@@ -61,94 +77,31 @@ interface Identity {
   status: "active" | "compromised" | "paused";
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Mapping helpers ──────────────────────────────────────────────────────────
 
-const MOCK_ALIASES: EmailAlias[] = [
-  {
-    id: "1",
-    alias: "shopping+abc123@shield.app",
-    label: "Shopping",
-    forwardTo: "user@gmail.com",
-    isActive: true,
-    emailsReceived: 47,
-    spamBlocked: 12,
-    createdAt: "2024-10-15",
-    source: "Amazon.com",
-    compromised: false,
-    spamRate: 26,
-    lastEmail: "2 hours ago",
-  },
-  {
-    id: "2",
-    alias: "newsletters+def456@shield.app",
-    label: "Newsletters",
-    forwardTo: "user@gmail.com",
-    isActive: true,
-    emailsReceived: 103,
-    spamBlocked: 31,
-    createdAt: "2024-11-01",
-    source: "Substack",
-    compromised: false,
-    spamRate: 30,
-    lastEmail: "Yesterday",
-  },
-  {
-    id: "3",
-    alias: "banking+ghi789@shield.app",
-    label: "Banking",
-    forwardTo: "user@gmail.com",
-    isActive: true,
-    emailsReceived: 8,
-    spamBlocked: 0,
-    createdAt: "2024-11-20",
-    source: "Chase Bank",
-    compromised: false,
-    spamRate: 0,
-    lastEmail: "3 days ago",
-  },
-  {
-    id: "4",
-    alias: "social+jkl012@shield.app",
-    label: "Social Media",
-    forwardTo: "user@gmail.com",
-    isActive: false,
-    emailsReceived: 215,
-    spamBlocked: 188,
-    createdAt: "2024-09-05",
-    source: "Unknown site",
-    compromised: true,
-    spamRate: 87,
-    lastEmail: "1 hour ago",
-  },
-  {
-    id: "5",
-    alias: "deals+mno345@shield.app",
-    label: "Deals & Coupons",
-    forwardTo: "user@gmail.com",
-    isActive: true,
-    emailsReceived: 62,
-    spamBlocked: 41,
-    createdAt: "2024-12-10",
-    source: "RetailMeNot",
-    compromised: true,
-    spamRate: 66,
-    lastEmail: "4 hours ago",
-  },
-  {
-    id: "6",
-    alias: "travel+pqr678@shield.app",
-    label: "Travel",
-    forwardTo: "user@gmail.com",
-    isActive: true,
-    emailsReceived: 19,
-    spamBlocked: 2,
-    createdAt: "2025-01-03",
-    source: "Airbnb",
-    compromised: false,
-    spamRate: 11,
-    lastEmail: "5 days ago",
-  },
-];
+function mapApiAlias(a: ApiEmailAlias): EmailAlias {
+  const spamRate = Math.round(
+    (a.spamBlocked / Math.max(a.emailsReceived, 1)) * 100
+  );
+  return {
+    id: a.id,
+    alias: a.alias,
+    label: a.label ?? "Untitled",
+    forwardTo: a.forwardTo ?? "",
+    isActive: a.isActive,
+    emailsReceived: a.emailsReceived,
+    spamBlocked: a.spamBlocked,
+    createdAt: a.createdAt.split("T")[0],
+    source: a.label ?? "Unknown",
+    compromised: a.spamBlocked > a.emailsReceived * 0.6,
+    spamRate,
+    lastEmail: a.updatedAt
+      ? new Date(a.updatedAt).toLocaleDateString()
+      : "Never",
+  };
+}
+
+// ─── Static mock identities (identities have no API yet) ─────────────────────
 
 const MOCK_IDENTITIES: Identity[] = [
   {
@@ -218,7 +171,12 @@ function statusBadge(status: Identity["status"]) {
 // ─── Page Component ───────────────────────────────────────────────────────────
 
 export default function EmailPage() {
-  const [aliases, setAliases] = useState<EmailAlias[]>(MOCK_ALIASES);
+  const { data: session } = useSession();
+
+  const [aliases, setAliases] = useState<EmailAlias[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [identities, setIdentities] = useState<Identity[]>(MOCK_IDENTITIES);
 
   // Create alias dialog
@@ -235,6 +193,30 @@ export default function EmailPage() {
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // ── Fetch aliases from real API ──
+  const fetchAliases = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/email-aliases");
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      const raw: ApiEmailAlias[] = json.data ?? json;
+      setAliases(raw.map(mapApiAlias));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load aliases");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAliases();
+  }, [fetchAliases]);
+
   // ── Derived stats ──
   const totalEmails = aliases.reduce((s, a) => s + a.emailsReceived, 0);
   const totalSpamBlocked = aliases.reduce((s, a) => s + a.spamBlocked, 0);
@@ -248,42 +230,85 @@ export default function EmailPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const handleToggle = useCallback((id: string) => {
+  const handleToggle = useCallback(async (id: string) => {
+    const current = aliases.find((a) => a.id === id);
+    if (!current) return;
+
+    // Optimistic update
     setAliases((prev) =>
       prev.map((a) => (a.id === id ? { ...a, isActive: !a.isActive } : a))
     );
-  }, []);
 
-  const handleDelete = useCallback((id: string) => {
+    try {
+      const res = await fetch(`/api/email-aliases/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !current.isActive }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        setAliases((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, isActive: current.isActive } : a))
+        );
+      }
+    } catch {
+      // Revert on error
+      setAliases((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, isActive: current.isActive } : a))
+      );
+    }
+  }, [aliases]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    // Optimistic removal
+    const previous = aliases.find((a) => a.id === id);
     setAliases((prev) => prev.filter((a) => a.id !== id));
-  }, []);
+
+    try {
+      const res = await fetch(`/api/email-aliases/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && previous) {
+        // Revert on failure
+        setAliases((prev) => [previous, ...prev]);
+      }
+    } catch {
+      if (previous) {
+        setAliases((prev) => [previous, ...prev]);
+      }
+    }
+  }, [aliases]);
 
   const handleCreate = useCallback(async () => {
-    if (!newLabel.trim() || !newForwardTo.trim()) return;
+    if (!newLabel.trim()) return;
     setIsCreating(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    const slug = newLabel.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const rand = Math.random().toString(36).slice(2, 8);
-    const newAlias: EmailAlias = {
-      id: Date.now().toString(),
-      alias: `${slug}+${rand}@shield.app`,
-      label: newLabel,
-      forwardTo: newForwardTo,
-      isActive: true,
-      emailsReceived: 0,
-      spamBlocked: 0,
-      createdAt: new Date().toISOString().split("T")[0],
-      source: newSource || "Unknown",
-      compromised: false,
-      spamRate: 0,
-      lastEmail: "Never",
-    };
-    setAliases((prev) => [newAlias, ...prev]);
-    setNewLabel("");
-    setNewForwardTo("");
-    setNewSource("");
-    setIsCreating(false);
-    setIsCreateOpen(false);
+    try {
+      const res = await fetch("/api/email-aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: newLabel.trim(),
+          forwardTo: newForwardTo.trim() || undefined,
+          forSite: newSource.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      const created: ApiEmailAlias = json.data ?? json;
+      setAliases((prev) => [mapApiAlias(created), ...prev]);
+      setNewLabel("");
+      setNewForwardTo("");
+      setNewSource("");
+      setIsCreateOpen(false);
+    } catch (err) {
+      // Surface error inline — keep dialog open so user can retry
+      alert(err instanceof Error ? err.message : "Failed to create alias");
+    } finally {
+      setIsCreating(false);
+    }
   }, [newLabel, newForwardTo, newSource]);
 
   const handleCreateIdentity = useCallback(() => {
@@ -437,14 +462,17 @@ export default function EmailPage() {
                 </Button>
                 <Button
                   onClick={handleCreate}
-                  disabled={
-                    isCreating ||
-                    !newLabel.trim() ||
-                    !newForwardTo.trim()
-                  }
+                  disabled={isCreating || !newLabel.trim()}
                   className="bg-violet-600 hover:bg-violet-700"
                 >
-                  {isCreating ? "Creating..." : "Create Alias"}
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Alias"
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -656,7 +684,31 @@ export default function EmailPage() {
 
       {/* ── Alias list ── */}
       <div className="space-y-3">
-        {aliases.length === 0 && (
+        {/* Loading state */}
+        {loading && (
+          <Card className="bg-white/5 border-white/10">
+            <CardContent className="py-16 text-center">
+              <Loader2 className="w-10 h-10 text-violet-400 mx-auto mb-3 animate-spin" />
+              <p className="text-zinc-400">Loading your aliases…</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error state */}
+        {!loading && error && (
+          <Card className="bg-white/5 border-red-500/30">
+            <CardContent className="py-10 text-center">
+              <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+              <p className="text-red-300 mb-4">{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchAliases}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty state */}
+        {!loading && !error && aliases.length === 0 && (
           <Card className="bg-white/5 border-white/10">
             <CardContent className="py-16 text-center">
               <Mail className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
@@ -751,7 +803,7 @@ export default function EmailPage() {
                         <span className="text-zinc-400 font-medium">
                           {alias.source}
                         </span>
-                        &nbsp;·&nbsp; Forwards to {alias.forwardTo}
+                        &nbsp;·&nbsp; Forwards to {alias.forwardTo || "—"}
                       </div>
 
                       {/* Spam rate bar */}

@@ -25,6 +25,7 @@ import {
   Radio,
   Mic,
   Eye,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,29 +33,33 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { useSession } from "next-auth/react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface VirtualNumber {
+interface VirtualPhone {
   id: string;
   number: string;
-  label: string;
-  active: boolean;
-  forwarding: string;
+  label: string | null;
+  isActive: boolean;
   callsReceived: number;
+  smsReceived: number;
   spamBlocked: number;
-  created: string;
-  type: "voip" | "esim";
+  forwardTo: string | null;
+  createdAt: string;
+  _count: { callLogs: number };
 }
 
 interface CallLogEntry {
   id: string;
-  number: string;
   from: string;
-  time: string;
-  duration: string;
-  status: "blocked" | "connected" | "screened";
-  aiNote?: string;
+  to: string;
+  duration: number | null;
+  status: string;
+  isSpam: boolean;
+  spamScore: number | null;
+  transcript: string | null;
+  createdAt: string;
 }
 
 type InterceptionStep = "ringing" | "analyzing" | "result";
@@ -65,99 +70,6 @@ interface CallGuardSettings {
   requireCallerId: boolean;
   voicemailTranscription: boolean;
 }
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_NUMBERS: VirtualNumber[] = [
-  {
-    id: "1",
-    number: "+1 (555) 234-5678",
-    label: "Online Shopping",
-    active: true,
-    forwarding: "+1 (555) 999-0001",
-    callsReceived: 24,
-    spamBlocked: 18,
-    created: "Dec 15, 2024",
-    type: "voip",
-  },
-  {
-    id: "2",
-    number: "+1 (555) 876-5432",
-    label: "Work Signups",
-    active: true,
-    forwarding: "+1 (555) 999-0001",
-    callsReceived: 8,
-    spamBlocked: 3,
-    created: "Jan 2, 2025",
-    type: "esim",
-  },
-  {
-    id: "3",
-    number: "+1 (555) 111-9876",
-    label: "Medical",
-    active: false,
-    forwarding: "+1 (555) 999-0001",
-    callsReceived: 2,
-    spamBlocked: 0,
-    created: "Jan 10, 2025",
-    type: "voip",
-  },
-];
-
-const CALL_LOG: CallLogEntry[] = [
-  {
-    id: "1",
-    number: "+1 (555) 234-5678",
-    from: "+1 (702) 555-0182",
-    time: "Today 2:34 PM",
-    duration: "0s",
-    status: "blocked",
-    aiNote: "Robocall pattern",
-  },
-  {
-    id: "2",
-    number: "+1 (555) 234-5678",
-    from: "Amazon",
-    time: "Today 11:20 AM",
-    duration: "2m 14s",
-    status: "connected",
-  },
-  {
-    id: "3",
-    number: "+1 (555) 876-5432",
-    from: "Unknown",
-    time: "Yesterday 4:45 PM",
-    duration: "0s",
-    status: "screened",
-    aiNote: "No caller ID",
-  },
-  {
-    id: "4",
-    number: "+1 (555) 234-5678",
-    from: "CVS Pharmacy",
-    time: "Jan 14 3:12 PM",
-    duration: "1m 05s",
-    status: "connected",
-  },
-  {
-    id: "5",
-    number: "+1 (555) 876-5432",
-    from: "Telemarketer",
-    time: "Jan 13 9:00 AM",
-    duration: "0s",
-    status: "blocked",
-    aiNote: "Known spam number",
-  },
-  {
-    id: "6",
-    number: "+1 (555) 111-9876",
-    from: "+1 (800) 555-9999",
-    time: "Jan 12 1:11 PM",
-    duration: "0s",
-    status: "blocked",
-    aiNote: "Robocall pattern",
-  },
-];
 
 // ─── Interception animation steps ─────────────────────────────────────────────
 
@@ -191,13 +103,22 @@ const INTERCEPTION_STEPS: Array<{
 // ─── Page Component ───────────────────────────────────────────────────────────
 
 export default function PhonePage() {
-  const [numbers, setNumbers] = useState<VirtualNumber[]>(MOCK_NUMBERS);
+  const { data: session } = useSession();
+  const [phones, setPhones] = useState<VirtualPhone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [addingNumber, setAddingNumber] = useState(false);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newAreaCode, setNewAreaCode] = useState("");
   const [newForward, setNewForward] = useState("");
   const [newNumberType, setNewNumberType] = useState<"voip" | "esim">("voip");
+
+  const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(null);
+  const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
+  const [callLogsLoading, setCallLogsLoading] = useState(false);
 
   const [interceptionStepIdx, setInterceptionStepIdx] = useState(0);
   const [callGuardSettings, setCallGuardSettings] =
@@ -208,7 +129,31 @@ export default function PhonePage() {
       voicemailTranscription: true,
     });
 
-  // Cycle the interception animation every 6 seconds
+  // ── Fetch phones from API ──────────────────────────────────────────────────
+
+  const fetchPhones = useCallback(async () => {
+    try {
+      setError(null);
+      const res = await fetch("/api/phone");
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "Failed to load virtual numbers");
+      }
+      const json = await res.json();
+      setPhones(json.data ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load virtual numbers");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session) fetchPhones();
+  }, [session, fetchPhones]);
+
+  // ── Cycle the interception animation every 6 seconds ──────────────────────
+
   useEffect(() => {
     const id = setInterval(() => {
       setInterceptionStepIdx((prev) => (prev + 1) % INTERCEPTION_STEPS.length);
@@ -216,51 +161,151 @@ export default function PhonePage() {
     return () => clearInterval(id);
   }, []);
 
+  // ── Copy to clipboard ─────────────────────────────────────────────────────
+
   const copyNumber = useCallback((id: string, number: string) => {
     navigator.clipboard.writeText(number);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const toggleNumber = useCallback((id: string) => {
-    setNumbers((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, active: !n.active } : n))
+  // ── Toggle active via PATCH ───────────────────────────────────────────────
+
+  const toggleNumber = useCallback(async (id: string, currentActive: boolean) => {
+    // Optimistic update
+    setPhones((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isActive: !currentActive } : p))
     );
+    try {
+      const res = await fetch(`/api/phone/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentActive }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        setPhones((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, isActive: currentActive } : p))
+        );
+      }
+    } catch {
+      setPhones((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, isActive: currentActive } : p))
+      );
+    }
   }, []);
 
-  const addNumber = useCallback(() => {
-    const newNum: VirtualNumber = {
-      id: String(numbers.length + 1),
-      number: `+1 (${newAreaCode || "555"}) ${Math.floor(
-        100 + Math.random() * 900
-      )}-${Math.floor(1000 + Math.random() * 9000)}`,
-      label: newLabel || "New Number",
-      active: true,
-      forwarding: newForward || "",
-      callsReceived: 0,
-      spamBlocked: 0,
-      created: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      type: newNumberType,
-    };
-    setNumbers((prev) => [...prev, newNum]);
-    setShowAddModal(false);
-    setNewLabel("");
-    setNewAreaCode("");
-    setNewForward("");
-    setNewNumberType("voip");
-  }, [numbers.length, newAreaCode, newLabel, newForward, newNumberType]);
+  // ── Delete phone ──────────────────────────────────────────────────────────
 
-  const totalSpamBlocked = numbers.reduce((sum, n) => sum + n.spamBlocked, 0);
-  const totalCallsReceived = numbers.reduce(
-    (sum, n) => sum + n.callsReceived,
-    0
-  );
+  const deletePhone = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/phone/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setPhones((prev) => prev.filter((p) => p.id !== id));
+        if (selectedPhoneId === id) {
+          setSelectedPhoneId(null);
+          setCallLogs([]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete phone", err);
+    }
+  }, [selectedPhoneId]);
+
+  // ── Add number via POST ───────────────────────────────────────────────────
+
+  const addNumber = useCallback(async () => {
+    setAddingNumber(true);
+    try {
+      const res = await fetch("/api/phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          areaCode: newAreaCode || "415",
+          label: newLabel || undefined,
+          forwardTo: newForward || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error ?? "Failed to add number");
+        return;
+      }
+      // Refetch to get the full object with _count
+      await fetchPhones();
+      setShowAddModal(false);
+      setNewLabel("");
+      setNewAreaCode("");
+      setNewForward("");
+      setNewNumberType("voip");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add number");
+    } finally {
+      setAddingNumber(false);
+    }
+  }, [newAreaCode, newLabel, newForward, fetchPhones]);
+
+  // ── Fetch call logs for a phone ───────────────────────────────────────────
+
+  const fetchCallLogs = useCallback(async (phoneId: string) => {
+    setCallLogsLoading(true);
+    try {
+      const res = await fetch(`/api/phone/${phoneId}/calls`);
+      if (res.ok) {
+        const json = await res.json();
+        setCallLogs(json.data?.items ?? []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch call logs", err);
+    } finally {
+      setCallLogsLoading(false);
+    }
+  }, []);
+
+  const handleSelectPhone = useCallback((phoneId: string) => {
+    if (selectedPhoneId === phoneId) {
+      setSelectedPhoneId(null);
+      setCallLogs([]);
+    } else {
+      setSelectedPhoneId(phoneId);
+      fetchCallLogs(phoneId);
+    }
+  }, [selectedPhoneId, fetchCallLogs]);
+
+  // ── Derived stats ─────────────────────────────────────────────────────────
+
+  const totalSpamBlocked = phones.reduce((sum, p) => sum + p.spamBlocked, 0);
+  const totalCallsReceived = phones.reduce((sum, p) => sum + p.callsReceived, 0);
 
   const currentStep = INTERCEPTION_STEPS[interceptionStepIdx];
+
+  // ── Loading / error states ────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-white/40">
+        <div className="text-center space-y-3">
+          <Phone className="w-10 h-10 mx-auto animate-pulse" />
+          <p className="text-sm">Loading your virtual numbers...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Card className="max-w-md w-full">
+          <CardContent className="py-12 text-center">
+            <AlertOctagon className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load</h3>
+            <p className="text-white/40 text-sm mb-6">{error}</p>
+            <Button onClick={fetchPhones}>Try again</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -269,13 +314,13 @@ export default function PhonePage() {
         {[
           {
             label: "Virtual Numbers",
-            value: numbers.length,
+            value: phones.length,
             icon: Phone,
             color: "text-violet-400",
           },
           {
             label: "Active Numbers",
-            value: numbers.filter((n) => n.active).length,
+            value: phones.filter((p) => p.isActive).length,
             icon: Shield,
             color: "text-green-400",
           },
@@ -506,7 +551,7 @@ export default function PhonePage() {
         </Button>
       </div>
 
-      {numbers.length === 0 ? (
+      {phones.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <Phone className="w-16 h-16 text-white/10 mx-auto mb-4" />
@@ -525,12 +570,12 @@ export default function PhonePage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {numbers.map((num) => (
+          {phones.map((phone) => (
             <motion.div
-              key={num.id}
+              key={phone.id}
               layout
               className={`glass-card rounded-2xl p-5 border transition-all ${
-                num.active ? "border-white/10" : "border-white/5 opacity-60"
+                phone.isActive ? "border-white/10" : "border-white/5 opacity-60"
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -538,70 +583,148 @@ export default function PhonePage() {
                   <div className="flex items-center gap-3 mb-2">
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        num.active ? "bg-violet-600/20" : "bg-white/5"
+                        phone.isActive ? "bg-violet-600/20" : "bg-white/5"
                       }`}
                     >
                       <Phone
                         className={`w-5 h-5 ${
-                          num.active ? "text-violet-400" : "text-white/30"
+                          phone.isActive ? "text-violet-400" : "text-white/30"
                         }`}
                       />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <div className="font-mono font-bold text-lg">
-                          {num.number}
+                          {phone.number}
                         </div>
-                        {num.type === "esim" ? (
-                          <Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30 text-xs">
-                            eSIM
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-white/10 text-white/50 border-white/10 text-xs">
-                            VoIP
-                          </Badge>
-                        )}
+                        <Badge className="bg-white/10 text-white/50 border-white/10 text-xs">
+                          VoIP
+                        </Badge>
                       </div>
-                      <div className="text-sm text-white/40">{num.label}</div>
+                      <div className="text-sm text-white/40">
+                        {phone.label || "No label"}
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3 text-xs text-white/40 ml-13">
                     <span className="flex items-center gap-1">
                       <ArrowRight className="w-3 h-3" />
-                      Forwarding to {num.forwarding || "not set"}
+                      Forwarding to {phone.forwardTo || "not set"}
                     </span>
                     <span className="flex items-center gap-1">
                       <PhoneIncoming className="w-3 h-3" />
-                      {num.callsReceived} calls
+                      {phone.callsReceived} calls
                     </span>
                     <span className="flex items-center gap-1 text-red-400/60">
                       <AlertOctagon className="w-3 h-3" />
-                      {num.spamBlocked} blocked
+                      {phone.spamBlocked} blocked
                     </span>
-                    <span>Created {num.created}</span>
+                    <span>
+                      Created{" "}
+                      {new Date(phone.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => copyNumber(num.id, num.number)}
+                    onClick={() => copyNumber(phone.id, phone.number)}
                     className="p-2 text-white/30 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     title="Copy number"
                   >
-                    {copiedId === num.id ? (
+                    {copiedId === phone.id ? (
                       <Check className="w-4 h-4 text-green-400" />
                     ) : (
                       <Copy className="w-4 h-4" />
                     )}
                   </button>
-                  <Button variant="ghost" size="icon-sm">
+                  <button
+                    onClick={() => handleSelectPhone(phone.id)}
+                    className="p-2 text-white/30 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                    title="View call log"
+                  >
                     <Settings className="w-4 h-4" />
-                  </Button>
+                  </button>
+                  <button
+                    onClick={() => deletePhone(phone.id)}
+                    className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    title="Delete number"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                   <Switch
-                    checked={num.active}
-                    onCheckedChange={() => toggleNumber(num.id)}
+                    checked={phone.isActive}
+                    onCheckedChange={() => toggleNumber(phone.id, phone.isActive)}
                   />
                 </div>
               </div>
+
+              {/* ── Expanded call log for this phone ── */}
+              <AnimatePresence>
+                {selectedPhoneId === phone.id && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <div className="text-xs text-white/30 uppercase tracking-widest mb-3">
+                        Call Log
+                      </div>
+                      {callLogsLoading ? (
+                        <p className="text-sm text-white/40 py-4 text-center">
+                          Loading call log...
+                        </p>
+                      ) : callLogs.length === 0 ? (
+                        <p className="text-sm text-white/40 py-4 text-center">
+                          No calls recorded yet
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {callLogs.map((call) => (
+                            <div
+                              key={call.id}
+                              className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 border border-white/10"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="text-sm text-white/70">
+                                  {call.from}
+                                </div>
+                                <div className="text-xs text-white/30">
+                                  {new Date(call.createdAt).toLocaleString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {call.duration != null && (
+                                  <span className="text-xs text-white/40">
+                                    {call.duration}s
+                                  </span>
+                                )}
+                                {call.isSpam ? (
+                                  <Badge variant="destructive" className="text-xs">
+                                    <ShieldOff className="w-3 h-3 mr-1" />
+                                    Spam
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="success" className="text-xs">
+                                    <PhoneIncoming className="w-3 h-3 mr-1" />
+                                    {call.status}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           ))}
         </div>
@@ -658,85 +781,13 @@ export default function PhonePage() {
       {/* ── Plan info ── */}
       <div className="bg-violet-600/10 border border-violet-500/20 rounded-xl p-4 flex items-center justify-between">
         <div className="text-sm text-white/60">
-          <span className="font-semibold text-white">{numbers.length}/3</span>{" "}
+          <span className="font-semibold text-white">{phones.length}/3</span>{" "}
           virtual numbers on Pro plan
         </div>
         <Button variant="outline" size="sm">
           Upgrade for more
         </Button>
       </div>
-
-      {/* ── Call Log ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Call Log</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10">
-                  {["Number", "From", "Time", "Duration", "Status", "AI Note"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className="text-left py-3 px-3 text-white/40 text-xs font-medium uppercase tracking-wider"
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {CALL_LOG.map((call) => (
-                  <tr
-                    key={call.id}
-                    className="border-b border-white/5 last:border-0 hover:bg-white/3 transition-colors"
-                  >
-                    <td className="py-3 px-3 text-white/60 font-mono text-xs">
-                      {call.number}
-                    </td>
-                    <td className="py-3 px-3 text-white/70">{call.from}</td>
-                    <td className="py-3 px-3 text-white/40">{call.time}</td>
-                    <td className="py-3 px-3 text-white/40">{call.duration}</td>
-                    <td className="py-3 px-3">
-                      {call.status === "blocked" && (
-                        <Badge variant="destructive" className="text-xs">
-                          <ShieldOff className="w-3 h-3 mr-1" />
-                          Blocked
-                        </Badge>
-                      )}
-                      {call.status === "connected" && (
-                        <Badge variant="success" className="text-xs">
-                          <PhoneIncoming className="w-3 h-3 mr-1" />
-                          Connected
-                        </Badge>
-                      )}
-                      {call.status === "screened" && (
-                        <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30 text-xs">
-                          <Bot className="w-3 h-3 mr-1" />
-                          Screened
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
-                      {call.aiNote ? (
-                        <span className="text-xs text-white/40 flex items-center gap-1">
-                          <Bot className="w-3 h-3 text-violet-400 shrink-0" />
-                          {call.aiNote}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-white/20">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* ── Add Number Modal ── */}
       <AnimatePresence>
@@ -861,6 +912,7 @@ export default function PhonePage() {
                   variant="outline"
                   className="flex-1"
                   onClick={() => setShowAddModal(false)}
+                  disabled={addingNumber}
                 >
                   Cancel
                 </Button>
@@ -871,11 +923,18 @@ export default function PhonePage() {
                       : ""
                   }`}
                   onClick={addNumber}
+                  disabled={addingNumber}
                 >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  {newNumberType === "esim"
-                    ? "Add eSIM Number"
-                    : "Add VoIP Number"}
+                  {addingNumber ? (
+                    "Requesting number..."
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-1.5" />
+                      {newNumberType === "esim"
+                        ? "Add eSIM Number"
+                        : "Add VoIP Number"}
+                    </>
+                  )}
                 </Button>
               </div>
             </motion.div>

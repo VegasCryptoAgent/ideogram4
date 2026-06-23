@@ -31,16 +31,17 @@ model User {
   planId             String?
   trialEndsAt        DateTime?
 
-  accounts      Account[]
-  sessions      Session[]
-  addresses     UserAddress[]
-  virtualPhones VirtualPhone[]
-  emailAliases  EmailAlias[]
-  brokerRecords BrokerRecord[]
-  spamSettings  SpamSettings?
-  notifications Notification[]
-  breachAlerts  BreachAlert[]
-  scanJobs      ScanJob[]
+  accounts        Account[]
+  sessions        Session[]
+  addresses       UserAddress[]
+  virtualPhones   VirtualPhone[]
+  emailAliases    EmailAlias[]
+  brokerRecords   BrokerRecord[]
+  spamSettings    SpamSettings?
+  notifications   Notification[]
+  breachAlerts    BreachAlert[]
+  scanJobs        ScanJob[]
+  passwordEntries PasswordEntry[]
 }
 
 model UserAddress {
@@ -193,6 +194,27 @@ model BreachAlert {
   createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordEntry {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site              String
+  url               String?
+  username          String
+  encryptedPassword String
+  strength          String   @default("medium")
+  hasTotp           Boolean  @default(false)
+  totpSecret        String?
+  tags              String[]
+  notes             String?
+  breached          Boolean  @default(false)
+  sharedVaultId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Account {

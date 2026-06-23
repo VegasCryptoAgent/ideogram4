@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   User, Lock, Bell, CreditCard, Trash2, Download, Eye, EyeOff, Check,
   AlertTriangle, HelpCircle, MessageCircle, Mail, Phone, ChevronDown,
@@ -56,6 +56,31 @@ export default function SettingsPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+
+  // Billing state (fetched from /api/subscription)
+  const [planName, setPlanName] = useState('Premium')
+  const [planPrice, setPlanPrice] = useState('$9.99')
+  const [nextBillingDate, setNextBillingDate] = useState('Loading...')
+  const [cardOnFile, setCardOnFile] = useState('—')
+  const [phoneUsage, setPhoneUsage] = useState('—')
+  const [aliasUsage, setAliasUsage] = useState('—')
+
+  useEffect(() => {
+    fetch('/api/subscription')
+      .then((r) => r.json())
+      .then((json) => {
+        const d = json.data ?? json
+        setPlanName(d.planName ?? 'Free')
+        if (d.stripe?.currentPeriodEnd) {
+          setNextBillingDate(new Date(d.stripe.currentPeriodEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
+        }
+        if (d.usage) {
+          setPhoneUsage(`${d.usage.virtualPhones ?? 0} of ${d.limits?.virtualPhones ?? '∞'} used`)
+          setAliasUsage(`${d.usage.emailAliases ?? 0} of ${d.limits?.emailAliases === 999 ? 'unlimited' : (d.limits?.emailAliases ?? '∞')} used`)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Profile state
   const [firstName, setFirstName] = useState('James')
@@ -396,7 +421,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white">Current Plan</CardTitle>
                 <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 px-3 py-1">
-                  Premium
+                  {planName}
                 </Badge>
               </div>
             </CardHeader>
@@ -410,8 +435,8 @@ export default function SettingsPage() {
                 {[
                   ['Weekly scans', '✓'],
                   ['200+ brokers covered', '✓'],
-                  ['Virtual phone numbers', '1 of 3 used'],
-                  ['Email aliases', '4 of unlimited used'],
+                  ['Virtual phone numbers', phoneUsage],
+                  ['Email aliases', aliasUsage],
                   ['Breach monitoring', '✓'],
                   ['Password manager', '✓'],
                 ].map(([label, val]) => (
@@ -428,16 +453,25 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Next billing date</p>
-                  <p className="text-white font-semibold">July 9, 2026</p>
+                  <p className="text-white font-semibold">{nextBillingDate}</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Card on file</p>
-                    <p className="text-white font-semibold">Visa •••• 4242</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">Expires 08/28</p>
+                    <p className="text-white font-semibold">{cardOnFile}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="border-zinc-700 hover:bg-zinc-800 text-xs">
-                    Edit
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-zinc-700 hover:bg-zinc-800 text-xs"
+                    onClick={() => {
+                      fetch('/api/subscription/portal')
+                        .then((r) => r.json())
+                        .then((d) => { if (d.data?.url || d.url) window.open(d.data?.url ?? d.url, '_blank') })
+                        .catch(() => {})
+                    }}
+                  >
+                    Manage
                   </Button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle,
@@ -417,23 +417,81 @@ function formatCount(n: number) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Maps a BreachAlert from DB to the Breach UI type
+function mapApiBreach(a: {
+  id: string
+  breachName: string
+  breachDate: string | null
+  dataExposed: string[]
+  isRead: boolean
+  sourceUrl: string | null
+  createdAt: string
+}): Breach {
+  const exposed = a.dataExposed ?? []
+  const severity: Breach['severity'] =
+    exposed.some((d) => /ssn|social security|password/i.test(d)) ? 'critical' :
+    exposed.length >= 4 ? 'high' :
+    exposed.length >= 2 ? 'medium' : 'low'
+
+  return {
+    id: a.id,
+    name: a.breachName,
+    domain: a.sourceUrl?.replace(/^https?:\/\/[^/]+\/[^#]+#?/, '') ?? a.breachName.toLowerCase(),
+    breachDate: a.breachDate ? a.breachDate.split('T')[0] : 'Unknown',
+    addedDate: a.createdAt.split('T')[0],
+    dataExposed: exposed,
+    severity,
+    description: `Your data was found in the ${a.breachName} breach. Exposed: ${exposed.join(', ')}.`,
+    isRead: a.isRead,
+    recordCount: 0,
+  }
+}
+
 export default function BreachPage() {
-  const [breaches, setBreaches] = useState<Breach[]>(MOCK_BREACHES)
+  const [breaches, setBreaches] = useState<Breach[]>([])
+  const [loading, setLoading] = useState(true)
   const [isChecking, setIsChecking] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>('4')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
 
+  const fetchBreaches = useCallback(async () => {
+    try {
+      const res = await fetch('/api/breach')
+      if (!res.ok) throw new Error('Failed to fetch')
+      const json = await res.json()
+      const raw: any[] = json.data ?? []
+      setBreaches(raw.length > 0 ? raw.map(mapApiBreach) : MOCK_BREACHES)
+    } catch {
+      setBreaches(MOCK_BREACHES)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchBreaches() }, [fetchBreaches])
+
   const unread = breaches.filter((b) => !b.isRead).length
-  const hasSsnAlert = MONITORED_TYPES.some((t) => t.status === 'alert')
+  const hasSsnAlert = breaches.some((b) =>
+    b.dataExposed.some((d) => /ssn|social security/i.test(d))
+  ) || MONITORED_TYPES.some((t) => t.status === 'alert')
 
   async function handleCheck() {
     setIsChecking(true)
-    await new Promise((r) => setTimeout(r, 2500))
-    setIsChecking(false)
+    try {
+      const res = await fetch('/api/breach', { method: 'POST' })
+      const json = await res.json()
+      const raw: any[] = json.data ?? []
+      if (raw.length > 0) setBreaches(raw.map(mapApiBreach))
+    } catch {
+      // keep existing
+    } finally {
+      setIsChecking(false)
+    }
   }
 
-  function markRead(id: string) {
+  async function markRead(id: string) {
     setBreaches((prev) => prev.map((b) => (b.id === id ? { ...b, isRead: true } : b)))
+    await fetch(`/api/breach/${id}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }), headers: { 'Content-Type': 'application/json' } })
   }
 
   return (

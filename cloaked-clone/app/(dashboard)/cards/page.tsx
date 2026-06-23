@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CreditCard,
@@ -625,6 +625,34 @@ export default function CardsPage() {
   void revealedNumbers;
   void revealedCVVs;
 
+  const fetchCards = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cards')
+      if (!res.ok) return
+      const json = await res.json()
+      const raw: any[] = json.data ?? []
+      if (raw.length > 0) {
+        setCards(raw.map((c) => ({
+          id: c.id,
+          nickname: c.nickname ?? `Card •••• ${c.last4}`,
+          type: 'merchant-locked' as VirtualCard['type'],
+          lastFour: c.last4,
+          expiry: `${String(c.expMonth).padStart(2,'0')}/${String(c.expYear).slice(-2)}`,
+          cvv: '•••',
+          status: (c.frozen ? 'frozen' : 'active') as VirtualCard['status'],
+          limit: c.spendingLimit ? c.spendingLimit / 100 : 500,
+          spent: 0,
+          merchant: c.merchant ?? null,
+          transactions: [],
+          color: 'blue',
+          createdAt: new Date().toISOString().split('T')[0],
+        })))
+      }
+    } catch { /* keep mock data */ }
+  }, [])
+
+  useEffect(() => { fetchCards() }, [fetchCards])
+
   const totalSpent = cards.reduce((s, c) => s + c.spent, 0);
   const blockedCount = cards.reduce(
     (s, c) => s + c.transactions.filter((t) => t.status === "blocked").length,
@@ -633,19 +661,25 @@ export default function CardsPage() {
   const activeCount = cards.filter((c) => c.status === "active").length;
 
   const toggleFreeze = (id: string) => {
+    const card = cards.find((c) => c.id === id)
+    const nowFrozen = card?.status !== 'frozen'
     setCards((prev) =>
       prev.map((c) =>
         c.id === id
-          ? { ...c, status: c.status === "frozen" ? "active" : "frozen" }
+          ? { ...c, status: nowFrozen ? 'frozen' : 'active' }
           : c
       )
     );
-    // Keep selectedCard in sync
     setSelectedCard((prev) =>
       prev && prev.id === id
-        ? { ...prev, status: prev.status === "frozen" ? "active" : "frozen" }
+        ? { ...prev, status: nowFrozen ? 'frozen' : 'active' }
         : prev
     );
+    fetch('/api/cards', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId: id, frozen: nowFrozen }),
+    }).catch(() => {})
   };
 
   const deleteCard = (id: string) => {

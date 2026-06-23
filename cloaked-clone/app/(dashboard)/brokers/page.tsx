@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -14,8 +14,8 @@ import {
   RefreshCw,
   X,
   FileText,
-  Zap,
   Download,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,81 +31,123 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type BrokerStatus = "found" | "requested" | "removed" | "monitoring";
+// UI stage (mapped from API userStatus)
+type BrokerStage = "scanning" | "found" | "submitted" | "removed" | "monitoring";
 
+// Shape returned by GET /api/brokers items[]
+interface ApiBrokerItem {
+  id: string;
+  name: string;
+  website: string;
+  category: string;
+  difficulty: string;
+  avgRemovalDays: number;
+  userStatus: string; // 'found' | 'removal_requested' | 'removed' | 'scanning' | 'not_scanned' | 'not_found' | ...
+  record: {
+    id: string;
+    status: string;
+    foundUrl: string | null;
+    requestedAt: string | null;
+    removedAt: string | null;
+    lastChecked: string | null;
+  } | null;
+}
+
+interface ApiStats {
+  found: number;
+  removal_requested: number;
+  removed: number;
+  scanning: number;
+  not_found: number;
+}
+
+// Broker as used in the UI
 interface Broker {
   id: string;
   name: string;
   category: string;
-  status: BrokerStatus;
+  stage: BrokerStage;
   dateFound: string;
   dateRemoved?: string;
-  recordsFound: number;
   url: string;
   lastChecked?: string;
-  nextScan?: string;
 }
 
-// ─── Mock Data (25 brokers) ───────────────────────────────────────────────────
+// ─── Status mapping helpers ────────────────────────────────────────────────
 
-const MOCK_BROKERS: Broker[] = [
-  { id: "1",  name: "Spokeo",            category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 22, 2024", recordsFound: 3,  url: "spokeo.com" },
-  { id: "2",  name: "WhitePages",        category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 28, 2024", recordsFound: 2,  url: "whitepages.com" },
-  { id: "3",  name: "BeenVerified",      category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 5, 2025",  recordsFound: 1,  url: "beenverified.com" },
-  { id: "4",  name: "TruthFinder",       category: "Background Check", status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 2,             url: "truthfinder.com" },
-  { id: "5",  name: "Radaris",           category: "People Search",    status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "radaris.com" },
-  { id: "6",  name: "FastPeopleSearch",  category: "People Search",    status: "found",      dateFound: "Jan 15, 2025", recordsFound: 4,             url: "fastpeoplesearch.com" },
-  { id: "7",  name: "Intelius",          category: "Background Check", status: "found",      dateFound: "Jan 15, 2025", recordsFound: 1,             url: "intelius.com" },
-  { id: "8",  name: "MyLife",            category: "Reputation",       status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Dec 1, 2024",  recordsFound: 1,  url: "mylife.com",            lastChecked: "3 days ago", nextScan: "27 days" },
-  { id: "9",  name: "Pipl",             category: "Identity",          status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 2, 2025",  recordsFound: 2,  url: "pipl.com" },
-  { id: "10", name: "ZabaSearch",        category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 10, 2025", recordsFound: 1,  url: "zabasearch.com" },
-  { id: "11", name: "PeopleSmart",       category: "People Search",    status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Nov 30, 2024", recordsFound: 2,  url: "peoplesmart.com",       lastChecked: "1 day ago",  nextScan: "29 days" },
-  { id: "12", name: "Instant Checkmate", category: "Background Check", status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "instantcheckmate.com" },
-  { id: "13", name: "Acxiom",           category: "Marketing",         status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 10, 2024", recordsFound: 5,  url: "acxiom.com" },
-  { id: "14", name: "LexisNexis",        category: "Identity",         status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 3,             url: "lexisnexis.com" },
-  { id: "15", name: "PeopleFinder",      category: "People Search",    status: "found",      dateFound: "Jan 15, 2025", recordsFound: 2,             url: "peoplefinder.com" },
-  { id: "16", name: "PeekYou",           category: "People Search",    status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 3, 2025",  recordsFound: 1,  url: "peekyou.com" },
-  { id: "17", name: "US Search",         category: "People Search",    status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Nov 30, 2024", recordsFound: 1,  url: "ussearch.com",          lastChecked: "2 days ago", nextScan: "28 days" },
-  { id: "18", name: "CheckPeople",       category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Dec 29, 2024", recordsFound: 2,  url: "checkpeople.com" },
-  { id: "19", name: "Nuwber",            category: "People Search",    status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 1,             url: "nuwber.com" },
-  { id: "20", name: "Epsilon",           category: "Marketing",        status: "found",      dateFound: "Jan 15, 2025", recordsFound: 4,             url: "epsilon.com" },
-  { id: "21", name: "CoreLogic",         category: "Financial",        status: "requested",  dateFound: "Jan 8, 2025",  recordsFound: 2,             url: "corelogic.com" },
-  { id: "22", name: "Data.com",          category: "Marketing",        status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 5, 2024",  recordsFound: 1,  url: "data.com" },
-  { id: "23", name: "Arrest.org",        category: "Background Check", status: "removed",    dateFound: "Dec 15, 2024", dateRemoved: "Jan 8, 2025",  recordsFound: 1,  url: "arrest.org" },
-  { id: "24", name: "TowerData",         category: "Marketing",        status: "monitoring", dateFound: "Nov 20, 2024", dateRemoved: "Dec 1, 2024",  recordsFound: 3,  url: "towerdata.com",         lastChecked: "4 days ago", nextScan: "26 days" },
-  { id: "25", name: "Equifax Marketing", category: "Financial",        status: "removed",    dateFound: "Nov 20, 2024", dateRemoved: "Dec 20, 2024", recordsFound: 2,  url: "equifax.com" },
-];
+function apiStatusToStage(userStatus: string): BrokerStage {
+  switch (userStatus) {
+    case "scanning":
+      return "scanning";
+    case "found":
+      return "found";
+    case "removal_requested":
+    case "opt_out_requested":
+    case "opt_out_in_progress":
+      return "submitted";
+    case "removed":
+      return "removed";
+    case "not_scanned":
+    case "not_found":
+    default:
+      return "monitoring";
+  }
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function apiBrokerToUi(item: ApiBrokerItem): Broker {
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    stage: apiStatusToStage(item.userStatus),
+    url: item.website,
+    dateFound: formatDate(item.record?.requestedAt ?? item.record?.lastChecked),
+    dateRemoved: item.record?.removedAt ? formatDate(item.record.removedAt) : undefined,
+    lastChecked: item.record?.lastChecked ? formatDate(item.record.lastChecked) : undefined,
+  };
+}
 
 // ─── Status Config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<
-  BrokerStatus,
+  BrokerStage,
   { label: string; color: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  found:      { label: "Found",             color: "text-red-400",    icon: AlertCircle },
-  requested:  { label: "Removal Requested", color: "text-amber-400",  icon: Clock },
-  removed:    { label: "Removed",           color: "text-green-400",  icon: CheckCircle },
-  monitoring: { label: "Monitoring",        color: "text-violet-400", icon: Eye },
+  scanning:   { label: "Scanning",           color: "text-yellow-400",  icon: Loader2 },
+  found:      { label: "Found",              color: "text-red-400",     icon: AlertCircle },
+  submitted:  { label: "Removal Submitted",  color: "text-blue-400",    icon: Clock },
+  removed:    { label: "Removed",            color: "text-green-400",   icon: CheckCircle },
+  monitoring: { label: "Monitoring",         color: "text-violet-400",  icon: Eye },
 };
 
-const TABS = ["All", "Found", "Removal Requested", "Removed", "Monitoring"] as const;
+const TABS = ["All", "Found", "Submitted", "Removed", "Monitoring"] as const;
 
-function statusToTab(status: BrokerStatus): string {
-  if (status === "found") return "Found";
-  if (status === "requested") return "Removal Requested";
-  if (status === "removed") return "Removed";
-  if (status === "monitoring") return "Monitoring";
+function stageToTab(stage: BrokerStage): string {
+  if (stage === "found") return "Found";
+  if (stage === "submitted") return "Submitted";
+  if (stage === "removed") return "Removed";
+  if (stage === "monitoring") return "Monitoring";
+  if (stage === "scanning") return "Monitoring"; // scanning shows under Monitoring tab
   return "All";
 }
 
 // ─── Progress Dots ────────────────────────────────────────────────────────────
 
-function ProgressDots({ status }: { status: BrokerStatus }) {
+function ProgressDots({ stage }: { stage: BrokerStage }) {
   const steps = ["Scanned", "Found", "Submitted", "Removed"];
   const filled =
-    status === "found" ? 2
-    : status === "requested" ? 3
-    : status === "removed" || status === "monitoring" ? 4
+    stage === "found" ? 2
+    : stage === "submitted" ? 3
+    : stage === "removed" || stage === "monitoring" ? 4
     : 1;
 
   return (
@@ -115,7 +157,7 @@ function ProgressDots({ status }: { status: BrokerStatus }) {
           <div
             className={`w-2 h-2 rounded-full transition-colors ${
               i < filled
-                ? status === "monitoring"
+                ? stage === "monitoring"
                   ? "bg-violet-400"
                   : "bg-green-400"
                 : "bg-white/10"
@@ -126,7 +168,7 @@ function ProgressDots({ status }: { status: BrokerStatus }) {
             <div
               className={`w-3 h-px ${
                 i < filled - 1
-                  ? status === "monitoring"
+                  ? stage === "monitoring"
                     ? "bg-violet-400/50"
                     : "bg-green-400/50"
                   : "bg-white/10"
@@ -213,13 +255,12 @@ function CertificateModal({
           {/* Fields */}
           <div className="space-y-3 mb-5">
             {[
-              { label: "Certificate ID",   value: certId,                                     mono: true },
-              { label: "Issued To",        value: "James Reeves",                             mono: false },
-              { label: "Date Issued",      value: today,                                      mono: false },
-              { label: "Data Broker",      value: broker.name,                                mono: false },
-              { label: "Domain",           value: broker.url,                                 mono: true },
-              { label: "Records Removed",  value: `${broker.recordsFound} record${broker.recordsFound !== 1 ? "s" : ""}`, mono: false },
-              { label: "Removal Confirmed", value: broker.dateRemoved ?? "—",                 mono: false },
+              { label: "Certificate ID",    value: certId,                     mono: true },
+              { label: "Issued To",         value: "User",                     mono: false },
+              { label: "Date Issued",       value: today,                      mono: false },
+              { label: "Data Broker",       value: broker.name,                mono: false },
+              { label: "Domain",            value: broker.url,                 mono: true },
+              { label: "Removal Confirmed", value: broker.dateRemoved ?? "—",  mono: false },
             ].map(({ label, value, mono }) => (
               <div key={label} className="flex justify-between items-start gap-4">
                 <span className="text-xs text-zinc-400 shrink-0 w-36">{label}</span>
@@ -285,9 +326,91 @@ export default function BrokersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [certBroker, setCertBroker] = useState<Broker | null>(null);
 
+  // Real data state
+  const [brokers, setBrokers] = useState<Broker[]>([]);
+  const [stats, setStats] = useState<ApiStats>({ found: 0, removal_requested: 0, removed: 0, scanning: 0, not_found: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
+
+  // Fetch brokers from real API
+  useEffect(() => {
+    async function fetchBrokers() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/brokers?limit=100");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error ?? "Failed to fetch brokers");
+
+        const items: ApiBrokerItem[] = json.data.items ?? [];
+        setBrokers(items.map(apiBrokerToUi));
+
+        if (json.data.stats) {
+          setStats(json.data.stats as ApiStats);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load brokers");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBrokers();
+  }, []);
+
+  // Request removal for a single broker
+  async function requestRemoval(brokerId: string) {
+    if (requestingIds.has(brokerId)) return;
+    setRequestingIds((prev) => new Set(prev).add(brokerId));
+
+    // Optimistic update
+    setBrokers((prev) =>
+      prev.map((b) => (b.id === brokerId ? { ...b, stage: "submitted" as BrokerStage } : b))
+    );
+    setStats((prev) => ({
+      ...prev,
+      found: Math.max(0, prev.found - 1),
+      removal_requested: prev.removal_requested + 1,
+    }));
+
+    try {
+      const res = await fetch(`/api/brokers/${brokerId}/remove`, { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        // Revert optimistic update on error (unless already requested = 409)
+        if (res.status !== 409) {
+          setBrokers((prev) =>
+            prev.map((b) => (b.id === brokerId ? { ...b, stage: "found" as BrokerStage } : b))
+          );
+          setStats((prev) => ({
+            ...prev,
+            found: prev.found + 1,
+            removal_requested: Math.max(0, prev.removal_requested - 1),
+          }));
+          console.error("Removal request failed:", json.error);
+        }
+      }
+    } catch (err) {
+      console.error("Removal request error:", err);
+    } finally {
+      setRequestingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(brokerId);
+        return next;
+      });
+    }
+  }
+
+  // Request removal for all found brokers
+  async function requestRemovalForAll() {
+    const foundBrokers = brokers.filter((b) => b.stage === "found");
+    await Promise.all(foundBrokers.map((b) => requestRemoval(b.id)));
+  }
+
   const filtered = useMemo(() => {
-    return MOCK_BROKERS.filter((b) => {
-      const tabLabel = statusToTab(b.status);
+    return brokers.filter((b) => {
+      const tabLabel = stageToTab(b.stage);
       const matchesTab = activeTab === "All" || tabLabel === activeTab;
       const matchesSearch =
         b.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -295,24 +418,27 @@ export default function BrokersPage() {
       const matchesCategory = category === "all" || b.category === category;
       return matchesTab && matchesSearch && matchesCategory;
     });
-  }, [activeTab, search, category]);
+  }, [brokers, activeTab, search, category]);
 
-  const categories = Array.from(new Set(MOCK_BROKERS.map((b) => b.category))).sort();
+  const categories = useMemo(
+    () => Array.from(new Set(brokers.map((b) => b.category))).sort(),
+    [brokers]
+  );
 
-  // Pipeline counts
+  // Pipeline counts from real API stats
   const pipelineCounts = {
-    found:      MOCK_BROKERS.filter((b) => b.status === "found").length,
-    requested:  MOCK_BROKERS.filter((b) => b.status === "requested").length,
-    removed:    MOCK_BROKERS.filter((b) => b.status === "removed").length,
-    monitoring: MOCK_BROKERS.filter((b) => b.status === "monitoring").length,
+    found:      stats.found,
+    requested:  stats.removal_requested,
+    removed:    stats.removed,
+    monitoring: stats.not_found + stats.scanning,
   };
 
   const tabCounts: Record<string, number> = {
-    All: MOCK_BROKERS.length,
-    Found: pipelineCounts.found,
-    "Removal Requested": pipelineCounts.requested,
-    Removed: pipelineCounts.removed,
-    Monitoring: pipelineCounts.monitoring,
+    All:        brokers.length,
+    Found:      brokers.filter((b) => b.stage === "found").length,
+    Submitted:  brokers.filter((b) => b.stage === "submitted").length,
+    Removed:    brokers.filter((b) => b.stage === "removed").length,
+    Monitoring: brokers.filter((b) => b.stage === "monitoring" || b.stage === "scanning").length,
   };
 
   function toggleSelect(id: string) {
@@ -330,6 +456,36 @@ export default function BrokersPage() {
     } else {
       setSelected(new Set(filtered.map((b) => b.id)));
     }
+  }
+
+  async function requestRemovalForSelected() {
+    const selectedBrokers = brokers.filter(
+      (b) => selected.has(b.id) && b.stage === "found"
+    );
+    await Promise.all(selectedBrokers.map((b) => requestRemoval(b.id)));
+    setSelected(new Set());
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+        <span className="ml-3 text-white/50">Loading brokers...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <AlertCircle className="w-12 h-12 text-red-400" />
+        <p className="text-white/60">{error}</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -373,6 +529,20 @@ export default function BrokersPage() {
               </React.Fragment>
             ))}
           </div>
+
+          {/* Request Removal for All Found button */}
+          {pipelineCounts.found > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/10 flex justify-end">
+              <Button
+                size="sm"
+                onClick={requestRemovalForAll}
+                className="bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/20"
+              >
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                Request Removal for All Found ({pipelineCounts.found})
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -445,7 +615,7 @@ export default function BrokersPage() {
               <Button size="sm" variant="outline" onClick={() => setSelected(new Set())}>
                 Clear
               </Button>
-              <Button size="sm">
+              <Button size="sm" onClick={requestRemovalForSelected}>
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                 Request Removal
               </Button>
@@ -487,28 +657,26 @@ export default function BrokersPage() {
                   <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">
                     Removed
                   </th>
-                  <th className="text-left p-4 text-white/40 font-medium text-xs uppercase tracking-wider">
-                    Recs
-                  </th>
                   <th className="p-4" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-12 text-center">
+                    <td colSpan={8} className="p-12 text-center">
                       <Database className="w-12 h-12 text-white/10 mx-auto mb-3" />
                       <p className="text-white/40">No brokers match your filters</p>
                     </td>
                   </tr>
                 ) : (
                   filtered.map((broker) => {
-                    const cfg = STATUS_CONFIG[broker.status];
+                    const cfg = STATUS_CONFIG[broker.stage];
                     const StatusIcon = cfg.icon;
-                    const isMonitoring = broker.status === "monitoring";
-                    const isRemoved = broker.status === "removed";
-                    const isFound = broker.status === "found";
-                    const isPending = broker.status === "requested";
+                    const isMonitoring = broker.stage === "monitoring" || broker.stage === "scanning";
+                    const isRemoved = broker.stage === "removed";
+                    const isFound = broker.stage === "found";
+                    const isSubmitted = broker.stage === "submitted";
+                    const isRequesting = requestingIds.has(broker.id);
 
                     return (
                       <React.Fragment key={broker.id}>
@@ -532,14 +700,18 @@ export default function BrokersPage() {
                           </td>
                           <td className="p-4">
                             <div className="flex items-center gap-1.5">
-                              <StatusIcon className={`w-3.5 h-3.5 shrink-0 ${cfg.color}`} />
+                              <StatusIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${cfg.color} ${
+                                  broker.stage === "scanning" ? "animate-spin" : ""
+                                }`}
+                              />
                               <span className={`text-xs font-medium ${cfg.color}`}>
                                 {cfg.label}
                               </span>
                             </div>
                           </td>
                           <td className="p-4 hidden lg:table-cell">
-                            <ProgressDots status={broker.status} />
+                            <ProgressDots stage={broker.stage} />
                           </td>
                           <td className="p-4 text-sm text-white/40 hidden md:table-cell">
                             {broker.dateFound}
@@ -547,19 +719,27 @@ export default function BrokersPage() {
                           <td className="p-4 text-sm text-white/40 hidden lg:table-cell">
                             {broker.dateRemoved ?? <span className="text-white/20">—</span>}
                           </td>
-                          <td className="p-4 text-sm text-white/60">{broker.recordsFound}</td>
                           <td className="p-4">
                             <div className="flex items-center gap-2">
                               {isFound && (
-                                <Button size="sm" className="text-xs whitespace-nowrap">
+                                <Button
+                                  size="sm"
+                                  className="text-xs whitespace-nowrap"
+                                  disabled={isRequesting}
+                                  onClick={() => requestRemoval(broker.id)}
+                                >
+                                  {isRequesting ? (
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  ) : null}
                                   Request Removal
                                 </Button>
                               )}
-                              {isPending && (
+                              {isSubmitted && (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="text-xs whitespace-nowrap"
+                                  disabled
                                 >
                                   <Clock className="w-3 h-3 mr-1" />
                                   Pending
@@ -583,14 +763,12 @@ export default function BrokersPage() {
                         {/* Monitoring sub-row */}
                         {isMonitoring && broker.lastChecked && (
                           <tr className="border-b border-white/5 last:border-0">
-                            <td colSpan={9} className="px-14 pb-3 pt-0">
+                            <td colSpan={8} className="px-14 pb-3 pt-0">
                               <div className="flex items-center gap-4 text-xs text-white/30">
                                 <span className="flex items-center gap-1">
                                   <Eye className="w-3 h-3" />
                                   Last checked: {broker.lastChecked}
                                 </span>
-                                <span>·</span>
-                                <span>Next scan in: {broker.nextScan}</span>
                               </div>
                             </td>
                           </tr>

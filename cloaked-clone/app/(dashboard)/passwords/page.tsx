@@ -1107,6 +1107,28 @@ function PasswordRow({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+function mapApiEntry(e: {
+  id: string; site: string; url?: string | null; username: string;
+  encryptedPassword: string; strength: string; hasTotp: boolean;
+  totpSecret?: string | null; tags: string[]; notes?: string | null;
+  breached: boolean; sharedVaultId?: string | null; updatedAt: string;
+}): PasswordEntry {
+  return {
+    id: e.id,
+    site: e.site,
+    url: e.url ?? e.site.toLowerCase().replace(/\s/g, '') + '.com',
+    username: e.username,
+    password: e.encryptedPassword,
+    strength: (e.strength as PasswordEntry['strength']) ?? 'medium',
+    hasTotp: e.hasTotp,
+    lastUpdated: new Date(e.updatedAt).toLocaleDateString(),
+    tags: e.tags ?? [],
+    notes: e.notes ?? undefined,
+    breached: e.breached,
+    sharedVault: e.sharedVaultId ?? undefined,
+  }
+}
+
 export default function PasswordsPage() {
   const [passwords, setPasswords] = useState<PasswordEntry[]>(MOCK_PASSWORDS);
   const [vaults] = useState<SharedVault[]>(MOCK_VAULTS);
@@ -1115,6 +1137,18 @@ export default function PasswordsPage() {
   const [showCreateVault, setShowCreateVault] = useState(false);
   const [showYubikey, setShowYubikey] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const fetchPasswords = useCallback(async () => {
+    try {
+      const res = await fetch('/api/passwords')
+      if (!res.ok) return
+      const json = await res.json()
+      const raw: any[] = json.data ?? []
+      if (raw.length > 0) setPasswords(raw.map(mapApiEntry))
+    } catch { /* keep mock data */ }
+  }, [])
+
+  useEffect(() => { fetchPasswords() }, [fetchPasswords])
 
   const filteredPasswords = passwords.filter(
     (p) =>
@@ -1130,15 +1164,30 @@ export default function PasswordsPage() {
     setTimeout(() => setCopiedId(null), 1500);
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setPasswords((prev) => prev.filter((p) => p.id !== id));
+    await fetch(`/api/passwords/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
-  function handleAddPassword(entry: PasswordEntry) {
+  async function handleAddPassword(entry: PasswordEntry) {
     setPasswords((prev) => [entry, ...prev]);
+    await fetch('/api/passwords', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        site: entry.site,
+        url: entry.url,
+        username: entry.username,
+        encryptedPassword: entry.password,
+        strength: entry.strength,
+        hasTotp: entry.hasTotp,
+        tags: entry.tags,
+        notes: entry.notes,
+      }),
+    }).catch(() => {})
   }
 
-  const totalCount = 47;
+  const totalCount = passwords.length || 47;
   const weakCount = passwords.filter((p) => p.strength === "weak").length;
   const reusedCount = 2;
   const totpCount = passwords.filter((p) => p.hasTotp).length;
