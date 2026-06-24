@@ -6,6 +6,7 @@
 
 import { prisma } from './prisma';
 import { calculatePrivacyScore } from '../services/privacy-score';
+import { runOptOutJob } from './optout-processor';
 
 const DETECTION_RATE = 0.35;
 
@@ -86,9 +87,10 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
           });
           if (isFound && existing.status !== 'removal_requested' && existing.status !== 'removed') {
             found++;
+            void runOptOutJob(userId, broker.id, existing.id);
           }
         } else {
-          await prisma.brokerRecord.create({
+          const newRecord = await prisma.brokerRecord.create({
             data: {
               userId,
               brokerId: broker.id,
@@ -96,7 +98,10 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
               lastChecked: new Date(),
             },
           });
-          if (isFound) found++;
+          if (isFound) {
+            found++;
+            void runOptOutJob(userId, broker.id, newRecord.id);
+          }
         }
 
         scanned++;

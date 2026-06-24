@@ -464,11 +464,16 @@ export default function SettingsPage() {
                     size="sm"
                     variant="outline"
                     className="border-zinc-700 hover:bg-zinc-800 text-xs"
-                    onClick={() => {
-                      fetch('/api/subscription/portal')
-                        .then((r) => r.json())
-                        .then((d) => { if (d.data?.url || d.url) window.open(d.data?.url ?? d.url, '_blank') })
-                        .catch(() => {})
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/subscription/portal', { method: 'POST' })
+                        const d = await res.json()
+                        const url = d.data?.url ?? d.url
+                        if (url) window.open(url, '_blank')
+                        else alert(d.data?.error ?? d.error ?? 'Could not open billing portal.')
+                      } catch {
+                        alert('Failed to open billing portal. Please try again.')
+                      }
                     }}
                   >
                     Manage
@@ -477,17 +482,38 @@ export default function SettingsPage() {
               </div>
 
               {/* Plan upgrade options */}
-              <div className="space-y-2">
-                <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold">Upgrade your plan</p>
+              <div className="space-y-3">
+                <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold">Change plan</p>
                 <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 gap-2">
-                    Upgrade to Family
-                    <Badge className="bg-zinc-700 text-zinc-300 text-xs ml-1">$14.99/mo</Badge>
-                  </Button>
-                  <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 gap-2">
-                    Add Couple Plan
-                    <Badge className="bg-zinc-700 text-zinc-300 text-xs ml-1">$12.99/mo</Badge>
-                  </Button>
+                  {[
+                    { planId: 'starter', label: 'Starter', price: '$4.99/mo' },
+                    { planId: 'pro',     label: 'Pro',     price: '$9.99/mo' },
+                    { planId: 'ultimate',label: 'Ultimate',price: '$19.99/mo' },
+                  ].map(({ planId, label, price }) => (
+                    <Button
+                      key={planId}
+                      variant="outline"
+                      className="border-zinc-700 hover:bg-zinc-800 gap-2"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/subscription/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ planId }),
+                          })
+                          const json = await res.json()
+                          const url = json.data?.url ?? json.url
+                          if (url) window.location.href = url
+                          else alert(json.data?.error ?? json.error ?? 'Could not start checkout. Ensure Stripe price IDs are configured in Railway.')
+                        } catch {
+                          alert('Failed to connect to billing. Please try again.')
+                        }
+                      }}
+                    >
+                      {label}
+                      <Badge className="bg-zinc-700 text-zinc-300 text-xs ml-1">{price}</Badge>
+                    </Button>
+                  ))}
                 </div>
               </div>
 

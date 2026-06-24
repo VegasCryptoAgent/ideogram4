@@ -4,6 +4,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { runOptOutJob } from '@/lib/optout-processor';
 import {
   getAuthenticatedUser,
   successResponse,
@@ -137,5 +138,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     console.error('[Brokers GET]', err);
     return errorResponse('Failed to fetch brokers', 500);
+  }
+}
+
+// PATCH /api/brokers — manually trigger an opt-out for a specific broker record
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  const session = await getAuthenticatedUser();
+  if (!session) return errorResponse('Unauthorized', 401);
+
+  try {
+    const { recordId } = await req.json();
+    if (!recordId) return errorResponse('recordId required', 400);
+
+    const record = await prisma.brokerRecord.findFirst({
+      where: { id: recordId, userId: session.id },
+    });
+    if (!record) return errorResponse('Record not found', 404);
+    if (record.status === 'removed' || record.status === 'removal_requested') {
+      return errorResponse('Opt-out already submitted for this broker', 409);
+    }
+
+    void runOptOutJob(session.id, record.brokerId, record.id);
+
+    return successResponse({ message: 'Opt-out request submitted.' });
+  } catch (err) {
+    console.error('[Brokers PATCH]', err);
+    return errorResponse('Failed to submit opt-out', 500);
   }
 }
