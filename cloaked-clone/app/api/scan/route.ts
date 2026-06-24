@@ -6,7 +6,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { scannerQueue } from '@/lib/queues';
+import { runScanJob } from '@/lib/scan-processor';
 import { getPlanLimits } from '@/lib/stripe';
 import { getAuthenticatedUser, successResponse, errorResponse } from '@/lib/api-helpers';
 import { differenceInDays } from 'date-fns';
@@ -53,12 +53,9 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
       data: { userId: session.id, status: 'pending' },
     });
 
-    // Add to BullMQ queue
-    await scannerQueue.add(
-      'scan',
-      { userId: session.id, scanJobId: scanJob.id },
-      { jobId: `scan-${session.id}-${scanJob.id}`, priority: 2 }
-    );
+    // Fire-and-forget: process the scan in the background within this same
+    // Node.js process. Safe on Railway (persistent server, not serverless).
+    void runScanJob(session.id, scanJob.id);
 
     return successResponse({
       jobId: scanJob.id,
