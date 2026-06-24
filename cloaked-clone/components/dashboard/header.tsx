@@ -32,10 +32,10 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 
 const typeIcon: Record<string, string> = { removal: "✓", breach: "!", scan: "↻", alert: "⚠" };
 const typeBg: Record<string, string> = {
-  removal: "bg-green-100 text-green-700",
-  breach: "bg-red-100 text-red-700",
-  scan: "bg-[#F97316]/10 text-[#F97316]",
-  alert: "bg-amber-100 text-amber-700",
+  removal: "bg-green-500/20 text-green-400",
+  breach: "bg-red-500/20 text-red-400",
+  scan: "bg-orange-500/20 text-orange-400",
+  alert: "bg-amber-500/20 text-amber-400",
 };
 
 interface HeaderProps {
@@ -51,17 +51,17 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
   const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 
   return (
-    <header className="h-16 border-b border-[#D4CFC5] bg-white flex items-center justify-between px-6 flex-shrink-0">
-      <h1 className="text-base font-semibold text-[#1A1A14]">{title}</h1>
+    <header className="h-16 border-b border-white/10 bg-[#141410] flex items-center justify-between px-6 flex-shrink-0">
+      <h1 className="text-base font-semibold text-white">{title}</h1>
 
       <div className="flex items-center gap-2">
         {/* Notifications */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#E8E3D9] transition-colors text-[#1A1A14]/50 hover:text-[#1A1A14]"
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/8 transition-colors text-white/50 hover:text-white"
           >
-            <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+            <Bell className="w-[18px] h-[18px]" />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] flex items-center justify-center font-bold text-white">
                 {unreadCount}
@@ -70,11 +70,11 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 top-11 w-80 bg-white border border-[#E5E0D5] rounded-2xl shadow-xl z-50 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E0D5]">
-                <h3 className="text-sm font-semibold text-[#1A1A14]">Notifications</h3>
+            <div className="absolute right-0 top-11 w-80 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <h3 className="text-sm font-semibold text-white">Notifications</h3>
                 {unreadCount > 0 && (
-                  <button onClick={markAllRead} className="text-xs text-[#F97316] hover:underline">
+                  <button onClick={markAllRead} className="text-xs text-orange-400 hover:underline">
                     Mark all read
                   </button>
                 )}
@@ -83,7 +83,7 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
                 {notifications.map((notif) => (
                   <div
                     key={notif.id}
-                    className={`px-4 py-3 border-b border-[#E5E0D5] last:border-0 hover:bg-[#F5F2EC] cursor-pointer transition-colors ${!notif.read ? "bg-[#FDEEDE]/40" : ""}`}
+                    className={`px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors ${!notif.read ? "bg-violet-600/10" : ""}`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${typeBg[notif.type]}`}>
@@ -91,11 +91,11 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium text-[#1A1A14] truncate">{notif.title}</span>
-                          {!notif.read && <span className="w-2 h-2 bg-[#F97316] rounded-full flex-shrink-0" />}
+                          <span className="text-sm font-medium text-white truncate">{notif.title}</span>
+                          {!notif.read && <span className="w-2 h-2 bg-orange-400 rounded-full flex-shrink-0" />}
                         </div>
-                        <p className="text-xs text-[#1A1A14]/50 mt-0.5">{notif.message}</p>
-                        <p className="text-xs text-[#1A1A14]/30 mt-1">{notif.time}</p>
+                        <p className="text-xs text-white/50 mt-0.5">{notif.message}</p>
+                        <p className="text-xs text-white/30 mt-1">{notif.time}</p>
                       </div>
                     </div>
                   </div>
@@ -108,39 +108,39 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
         {/* User dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2.5 hover:bg-[#E8E3D9] rounded-xl px-2.5 py-1.5 transition-colors">
+            <button className="flex items-center gap-2.5 hover:bg-white/8 rounded-xl px-2.5 py-1.5 transition-colors">
               <Avatar className="h-7 w-7">
                 <AvatarImage src="" alt="User" />
-                <AvatarFallback className="bg-[#141410] text-white text-xs">JD</AvatarFallback>
+                <AvatarFallback className="bg-violet-600 text-white text-xs">JD</AvatarFallback>
               </Avatar>
               <div className="hidden sm:block text-left">
-                <div className="text-sm font-medium text-[#1A1A14]">Jane Doe</div>
-                <div className="text-xs text-[#1A1A14]/40">Pro Plan</div>
+                <div className="text-sm font-medium text-white">Jane Doe</div>
+                <div className="text-xs text-white/40">Pro Plan</div>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-[#1A1A14]/30 hidden sm:block" />
+              <ChevronDown className="w-3.5 h-3.5 text-white/30 hidden sm:block" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 bg-white border-[#E5E0D5] rounded-xl shadow-lg">
-            <DropdownMenuLabel className="text-[#1A1A14]">My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-[#E5E0D5]" />
+          <DropdownMenuContent align="end" className="w-52 bg-zinc-900 border-white/10 rounded-xl shadow-lg">
+            <DropdownMenuLabel className="text-white">My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer text-[#1A1A14]">
+              <Link href="/settings" className="cursor-pointer text-white/80 hover:text-white">
                 <User className="mr-2 h-4 w-4" /> Profile
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer text-[#1A1A14]">
+              <Link href="/settings" className="cursor-pointer text-white/80 hover:text-white">
                 <CreditCard className="mr-2 h-4 w-4" /> Subscription
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer text-[#1A1A14]">
+              <Link href="/settings" className="cursor-pointer text-white/80 hover:text-white">
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-[#E5E0D5]" />
+            <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
-              className="text-red-500 focus:text-red-500 cursor-pointer"
+              className="text-red-400 focus:text-red-400 cursor-pointer"
               onClick={() => signOut({ callbackUrl: "/sign-in" })}
             >
               <LogOut className="mr-2 h-4 w-4" />

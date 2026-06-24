@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pageTitle = PAGE_TITLES[pathname] || "Dashboard";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#E8E3D9]">
+    <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
       {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (
         <div
@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="lg:hidden absolute top-4 left-4 z-20">
           <button
             onClick={() => setMobileSidebarOpen(true)}
-            className="p-2 text-[#1A1A14]/60 hover:text-[#1A1A14] bg-white rounded-lg border border-[#E5E0D5]"
+            className="p-2 text-white/60 hover:text-white bg-white/5 rounded-lg border border-white/10"
           >
             <Menu className="w-5 h-5" />
           </button>
