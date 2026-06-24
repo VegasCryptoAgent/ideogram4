@@ -8,4 +8,4 @@ cmds = ["npm ci --legacy-peer-deps"]
 cmds = ["npx prisma generate", "npm run build"]
 
 [start]
-cmd = "if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate deploy; fi && npm start"
+cmd = "if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate resolve --applied 0001_initial 2>/dev/null || true; npx prisma migrate deploy; fi && npm start"
