@@ -226,6 +226,26 @@ model VirtualCard {
   color     String   @default("blue")
   createdAt DateTime @default(now())
 
+  transactions CardTransaction[]
+
+  @@index([userId])
+}
+
+model CardTransaction {
+  id            String    @id @default(cuid())
+  privacyToken  String    @unique
+  virtualCardId String
+  virtualCard   VirtualCard @relation(fields: [virtualCardId], references: [id], onDelete: Cascade)
+  userId        String
+  merchant      String
+  merchantCity  String?
+  amount        Int
+  currency      String    @default("USD")
+  status        String    @default("APPROVED")
+  settledAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([virtualCardId])
   @@index([userId])
 }
 

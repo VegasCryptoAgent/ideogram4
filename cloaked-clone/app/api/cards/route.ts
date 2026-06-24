@@ -57,14 +57,36 @@ export async function GET() {
 
     if (dbCards.length === 0) return NextResponse.json({ data: [] })
 
-    const results = await Promise.allSettled(
-      dbCards.map((db) => getCard(db.token)),
-    )
+    const [results, txRows] = await Promise.all([
+      Promise.allSettled(dbCards.map((db) => getCard(db.token))),
+      prisma.cardTransaction.findMany({
+        where: { virtualCardId: { in: dbCards.map((d) => d.id) } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+
+    const txByCard: Record<string, typeof txRows> = {}
+    for (const tx of txRows) {
+      ;(txByCard[tx.virtualCardId] ??= []).push(tx)
+    }
 
     const data = results
       .map((r, i) => {
-        if (r.status === 'fulfilled') return formatCard(r.value, dbCards[i].color)
-        return null
+        if (r.status !== 'fulfilled') return null
+        const db = dbCards[i]
+        const txs = txByCard[db.id] ?? []
+        const spent = txs.filter((t) => t.status === 'APPROVED' || t.status === 'SETTLING' || t.status === 'SETTLED').reduce((s, t) => s + t.amount, 0)
+        return {
+          ...formatCard(r.value, db.color),
+          spent: spent / 100,
+          transactions: txs.slice(0, 20).map((t) => ({
+            id: t.id,
+            merchant: t.merchant,
+            amount: t.amount / 100,
+            date: new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            status: (t.status === 'APPROVED' || t.status === 'SETTLING' || t.status === 'SETTLED') ? 'approved' : 'blocked',
+          })),
+        }
       })
       .filter(Boolean)
 
