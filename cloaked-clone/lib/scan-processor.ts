@@ -2,31 +2,128 @@
  * Inline scan processor — runs the broker scan in the same Node.js process
  * without requiring a separate BullMQ worker. Safe for Railway (single-process
  * deployment) because Railway keeps the Node.js process alive between requests.
+ *
+ * Real broker detection uses direct HTTP requests with browser-like headers.
+ * Set SCRAPER_API_KEY (ScraperAPI) or SCRAPINGBEE_API_KEY (ScrapingBee) in
+ * Railway environment variables to route requests through a proxy for sites
+ * that enforce bot protection.
  */
 
+import axios from 'axios';
 import { prisma } from './prisma';
 import { calculatePrivacyScore } from '../services/privacy-score';
 import { runOptOutJob } from './optout-processor';
 
-const DETECTION_RATE = 0.35;
+const REQUEST_TIMEOUT_MS = 10_000;
+
+// Bot-detection signals — if the response HTML contains these we can't trust the result
+const BOT_SIGNALS = ['captcha', 'i am not a robot', 'access denied', 'cf-challenge', 'ddos-guard', 'please verify you are a human'];
+
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  Connection: 'keep-alive',
+  'Upgrade-Insecure-Requests': '1',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Cache-Control': 'max-age=0',
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function simulateBrokerScan(
+/**
+ * Checks whether a given data broker's search page returns the user's name.
+ *
+ * Strategy:
+ *  1. Build the search URL from the broker's scanUrlTemplate.
+ *  2. If SCRAPER_API_KEY is set, route through ScraperAPI (bypasses most CAPTCHAs).
+ *     If SCRAPINGBEE_API_KEY is set, use ScrapingBee instead.
+ *  3. Otherwise attempt a direct request with browser-like headers.
+ *  4. Search the raw HTML for the user's full name (case-insensitive).
+ *  5. On any error or bot-detection page, return false (conservative — don't flag false positives).
+ */
+async function checkBrokerForUser(
   broker: { name: string; scanUrlTemplate: string | null; website: string },
   profile: { firstName: string | null; lastName: string | null; state: string },
 ): Promise<boolean> {
-  const url =
-    broker.scanUrlTemplate
-      ?.replace('{firstName}', encodeURIComponent(profile.firstName ?? ''))
-      .replace('{lastName}', encodeURIComponent(profile.lastName ?? ''))
-      .replace('{state}', encodeURIComponent(profile.state)) ??
-    `https://${broker.website}/search`;
+  const firstName = profile.firstName?.trim() ?? '';
+  const lastName = profile.lastName?.trim() ?? '';
+  if (!firstName || !lastName) return false;
 
-  console.log(`[Scanner] Checking ${broker.name} → ${url}`);
-  return Math.random() < DETECTION_RATE;
+  const targetUrl =
+    broker.scanUrlTemplate
+      ?.replace('{firstName}', encodeURIComponent(firstName))
+      .replace('{lastName}', encodeURIComponent(lastName))
+      .replace('{state}', encodeURIComponent(profile.state)) ??
+    `https://${broker.website}/search?q=${encodeURIComponent(`${firstName} ${lastName}`)}`;
+
+  console.log(`[Scanner] Checking ${broker.name} → ${targetUrl}`);
+
+  const scraperApiKey = process.env.SCRAPER_API_KEY;
+  const scrapingBeeKey = process.env.SCRAPINGBEE_API_KEY;
+
+  let requestUrl = targetUrl;
+  let params: Record<string, string> | undefined;
+
+  if (scraperApiKey) {
+    // ScraperAPI: pass the target URL as a query param
+    requestUrl = 'https://api.scraperapi.com/';
+    params = { api_key: scraperApiKey, url: targetUrl };
+  } else if (scrapingBeeKey) {
+    // ScrapingBee: similar pattern
+    requestUrl = 'https://app.scrapingbee.com/api/v1/';
+    params = { api_key: scrapingBeeKey, url: targetUrl, render_js: 'false' };
+  }
+
+  try {
+    const response = await axios.get<string>(requestUrl, {
+      headers: BROWSER_HEADERS,
+      params,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRedirects: 5,
+      responseType: 'text',
+      validateStatus: (s) => s < 500, // don't throw on 4xx
+    });
+
+    if (response.status === 403 || response.status === 429 || response.status === 401) {
+      console.log(`[Scanner] ${broker.name} blocked (HTTP ${response.status})`);
+      return false;
+    }
+
+    const html = response.data ?? '';
+    const lowerHtml = typeof html === 'string' ? html.toLowerCase() : '';
+
+    // Too short = almost certainly not a real results page
+    if (lowerHtml.length < 400) {
+      console.log(`[Scanner] ${broker.name} returned thin response (${lowerHtml.length} chars) — inconclusive`);
+      return false;
+    }
+
+    // Bot / CAPTCHA detection — can't trust the result
+    if (BOT_SIGNALS.some((sig) => lowerHtml.includes(sig))) {
+      console.log(`[Scanner] ${broker.name} shows bot-protection page — inconclusive`);
+      return false;
+    }
+
+    // Primary check: user's full name appears on the results page
+    const fullName = `${firstName} ${lastName}`.toLowerCase();
+    const reversed = `${lastName}, ${firstName}`.toLowerCase();
+    const found = lowerHtml.includes(fullName) || lowerHtml.includes(reversed);
+
+    console.log(`[Scanner] ${broker.name} → ${found ? 'FOUND' : 'not found'} (page: ${lowerHtml.length} chars)`);
+    return found;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // ECONNREFUSED, ETIMEDOUT, DNS errors, etc. — mark not found
+    console.log(`[Scanner] ${broker.name} fetch error: ${msg}`);
+    return false;
+  }
 }
 
 export async function runScanJob(userId: string, scanJobId: string): Promise<void> {
@@ -71,14 +168,14 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
 
     for (const broker of brokers) {
       try {
-        // Small delay so UI polling can show incremental progress
-        if (scanned > 0 && scanned % 10 === 0) await sleep(50);
+        // Stagger requests: 500 ms between each broker to avoid rate-limits
+        if (scanned > 0) await sleep(500);
 
         const existing = await prisma.brokerRecord.findUnique({
           where: { userId_brokerId: { userId, brokerId: broker.id } },
         });
 
-        const isFound = await simulateBrokerScan(broker, profile);
+        const isFound = await checkBrokerForUser(broker, profile);
 
         if (existing) {
           await prisma.brokerRecord.update({
