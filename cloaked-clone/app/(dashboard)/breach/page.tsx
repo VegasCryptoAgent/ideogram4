@@ -460,9 +460,9 @@ export default function BreachPage() {
       if (!res.ok) throw new Error('Failed to fetch')
       const json = await res.json()
       const raw: any[] = json.data ?? []
-      setBreaches(raw.length > 0 ? raw.map(mapApiBreach) : MOCK_BREACHES)
+      setBreaches(raw.map(mapApiBreach))
     } catch {
-      setBreaches(MOCK_BREACHES)
+      setBreaches([])
     } finally {
       setLoading(false)
     }
@@ -473,7 +473,7 @@ export default function BreachPage() {
   const unread = breaches.filter((b) => !b.isRead).length
   const hasSsnAlert = breaches.some((b) =>
     b.dataExposed.some((d) => /ssn|social security/i.test(d))
-  ) || MONITORED_TYPES.some((t) => t.status === 'alert')
+  )
 
   async function handleCheck() {
     setIsChecking(true)

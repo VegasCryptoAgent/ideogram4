@@ -111,20 +111,46 @@ export default function SettingsPage() {
     }
 
     loadSubscription()
+    loadProfile()
   }, [])
 
   // Profile state
-  const [firstName, setFirstName] = useState('James')
-  const [lastName, setLastName] = useState('Reeves')
-  const [email] = useState('jreeves@gmail.com')
-  const [dob, setDob] = useState('1985-06-14')
-  const [phones, setPhones] = useState(['+1 (555) 867-5309'])
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [dob, setDob] = useState('')
+  const [phones, setPhones] = useState<string[]>([])
   const [newPhone, setNewPhone] = useState('')
+  const [profileLoading, setProfileLoading] = useState(true)
 
   // Addresses
-  const [addresses, setAddresses] = useState([
-    { id: '1', street: '123 Main St', city: 'Austin', state: 'TX', zip: '78701' },
-  ])
+  const [addresses, setAddresses] = useState<{ id: string; street: string; city: string; state: string; zip: string }[]>([])
+
+  const loadProfile = () => {
+    fetch('/api/user/profile')
+      .then((r) => r.json())
+      .then((json) => {
+        const d = json.data ?? json
+        if (d.firstName) setFirstName(d.firstName)
+        else if (d.name) setFirstName(d.name.split(' ')[0] ?? '')
+        if (d.lastName) setLastName(d.lastName)
+        else if (d.name) setLastName(d.name.split(' ').slice(1).join(' ') ?? '')
+        if (d.email) setEmail(d.email)
+        if (d.dateOfBirth) setDob(new Date(d.dateOfBirth).toISOString().split('T')[0])
+        if (d.realPhones?.length) setPhones(d.realPhones)
+        if (d.addresses?.length) setAddresses(
+          d.addresses.map((a: { id: string; street?: string; addressLine1?: string; city: string; state: string; zipCode?: string; zip?: string }) => ({
+            id: a.id,
+            street: a.street ?? a.addressLine1 ?? '',
+            city: a.city,
+            state: a.state,
+            zip: a.zipCode ?? a.zip ?? '',
+          }))
+        )
+      })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false))
+  }
 
   // Notifications
   const [emailNotifs, setEmailNotifs] = useState({
@@ -162,35 +188,32 @@ export default function SettingsPage() {
     URL.revokeObjectURL(url)
   }
 
-  function exportAliasesCSV() {
-    const csvData = `alias,label,forwarding,created,emails_received\namzn-x7k2@shield.app,Amazon,jreeves@gmail.com,2025-01-15,142\nntflx-p9m3@shield.app,Netflix,jreeves@gmail.com,2025-02-03,28\nshop-k4j8@shield.app,Shopping,jreeves@gmail.com,2025-03-11,67\ndocs-r2w9@shield.app,Docs & Forms,jreeves@gmail.com,2025-04-22,9\nnews-v5x1@shield.app,Newsletter,jreeves@gmail.com,2025-05-07,315\n`
+  async function exportAliasesCSV() {
+    const res = await fetch('/api/email-aliases')
+    const json = await res.json()
+    const aliases: { alias: string; label?: string; createdAt: string }[] = json.data?.items ?? json.items ?? []
+    const rows = aliases.map((a) => `${a.alias},${a.label ?? ''},${email},${a.createdAt?.split('T')[0] ?? ''},0`)
+    const csvData = `alias,label,forwarding,created,emails_received\n${rows.join('\n')}\n`
     const blob = new Blob([csvData], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = 'shield-aliases.csv'
-    a.click()
+    a.href = url; a.download = 'shield-aliases.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
-  function exportAliasesJSON() {
+  async function exportAliasesJSON() {
+    const res = await fetch('/api/email-aliases')
+    const json = await res.json()
+    const aliases: { alias: string; label?: string; createdAt: string }[] = json.data?.items ?? json.items ?? []
     const jsonData = JSON.stringify({
       exported: new Date().toISOString(),
-      account: 'jreeves@gmail.com',
-      aliases: [
-        { alias: 'amzn-x7k2@shield.app', label: 'Amazon', forwarding: 'jreeves@gmail.com', created: '2025-01-15', emails_received: 142 },
-        { alias: 'ntflx-p9m3@shield.app', label: 'Netflix', forwarding: 'jreeves@gmail.com', created: '2025-02-03', emails_received: 28 },
-        { alias: 'shop-k4j8@shield.app', label: 'Shopping', forwarding: 'jreeves@gmail.com', created: '2025-03-11', emails_received: 67 },
-        { alias: 'docs-r2w9@shield.app', label: 'Docs & Forms', forwarding: 'jreeves@gmail.com', created: '2025-04-22', emails_received: 9 },
-        { alias: 'news-v5x1@shield.app', label: 'Newsletter', forwarding: 'jreeves@gmail.com', created: '2025-05-07', emails_received: 315 },
-      ],
+      account: email,
+      aliases: aliases.map((a) => ({ alias: a.alias, label: a.label ?? '', forwarding: email, created: a.createdAt?.split('T')[0] ?? '' })),
     }, null, 2)
     const blob = new Blob([jsonData], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = 'shield-aliases.json'
-    a.click()
+    a.href = url; a.download = 'shield-aliases.json'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -206,11 +229,24 @@ export default function SettingsPage() {
     setCancelStep(0)
   }
 
-  const BILLING_HISTORY = [
-    { date: 'Jun 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
-    { date: 'May 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
-    { date: 'Apr 9, 2026', description: 'Shield Premium', amount: '$9.99', status: 'Paid' },
-  ]
+  const [billingHistory, setBillingHistory] = useState<{ date: string; description: string; amount: string; status: string }[]>([])
+  useEffect(() => {
+    // Load invoices from Stripe via subscription portal data
+    fetch('/api/subscription')
+      .then(r => r.json())
+      .then(json => {
+        const d = json.data ?? json
+        if (d.stripe?.currentPeriodStart && d.planName) {
+          const price = d.planName === 'Starter' ? '$4.99' : d.planName === 'Pro' ? '$9.99' : d.planName === 'Ultimate' ? '$19.99' : ''
+          if (price) {
+            const start = new Date(d.stripe.currentPeriodStart)
+            setBillingHistory([
+              { date: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), description: `Shield ${d.planName}`, amount: price, status: 'Paid' },
+            ])
+          }
+        }
+      }).catch(() => {})
+  }, [])
 
   const CANCEL_REASONS = [
     'Too expensive',
@@ -316,7 +352,17 @@ export default function SettingsPage() {
                   <Button onClick={addPhone} variant="outline" className="border-zinc-700 hover:bg-zinc-800">Add</Button>
                 </div>
               </div>
-              <Button onClick={() => saveSection('profile')} className="bg-violet-600 hover:bg-violet-700">
+              <Button onClick={async () => {
+                try {
+                  const res = await fetch('/api/user/profile', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ firstName, lastName, dateOfBirth: dob || null, realPhones: phones }),
+                  })
+                  if (res.ok) saveSection('profile')
+                  else alert('Failed to save profile. Please try again.')
+                } catch { alert('Failed to save profile. Please try again.') }
+              }} className="bg-violet-600 hover:bg-violet-700">
                 {saved === 'profile' ? <><Check className="w-4 h-4 mr-2" /> Saved!</> : 'Save Profile'}
               </Button>
             </CardContent>
@@ -605,7 +651,9 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {BILLING_HISTORY.map((row) => (
+                    {billingHistory.length === 0 ? (
+                      <tr><td colSpan={5} className="py-6 text-center text-zinc-500 text-sm">No billing history yet.</td></tr>
+                    ) : billingHistory.map((row) => (
                       <tr key={row.date} className="border-b border-white/5 last:border-0">
                         <td className="py-3 text-zinc-300">{row.date}</td>
                         <td className="py-3 text-zinc-300">{row.description}</td>
