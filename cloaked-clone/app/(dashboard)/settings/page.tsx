@@ -56,6 +56,11 @@ export default function SettingsPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
   const [checkoutCanceled, setCheckoutCanceled] = useState(false)
 
@@ -77,6 +82,11 @@ export default function SettingsPage() {
           setNextBillingDate(new Date(d.stripe.currentPeriodEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
         } else {
           setNextBillingDate('—')
+        }
+        if (d.stripe?.card?.last4) {
+          setCardOnFile(`${(d.stripe.card.brand ?? 'Card').charAt(0).toUpperCase() + (d.stripe.card.brand ?? '').slice(1)} ••••${d.stripe.card.last4}`)
+        } else {
+          setCardOnFile('—')
         }
         if (d.usage) {
           const phones = d.limits?.virtualPhones
@@ -169,6 +179,70 @@ export default function SettingsPage() {
   function saveSection(section: string) {
     setSaved(section)
     setTimeout(() => setSaved(null), 2500)
+  }
+
+  async function handleChangePassword() {
+    setPwError(null)
+    if (!currentPw || !newPw || !confirmPw) { setPwError('All fields are required'); return }
+    if (newPw !== confirmPw) { setPwError('New passwords do not match'); return }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
+    const res = await fetch('/api/user/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+    })
+    const json = await res.json()
+    if (!res.ok) { setPwError(json.error ?? 'Failed to update password'); return }
+    setCurrentPw(''); setNewPw(''); setConfirmPw('')
+    saveSection('password')
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirm !== 'DELETE') return
+    setIsDeletingAccount(true)
+    try {
+      const res = await fetch('/api/user/profile', { method: 'DELETE' })
+      if (res.ok) {
+        // Sign out and redirect — account is gone
+        const { signOut } = await import('next-auth/react')
+        await signOut({ callbackUrl: '/sign-in?deleted=true' })
+      } else {
+        const json = await res.json()
+        alert(json.error ?? 'Failed to delete account')
+        setIsDeletingAccount(false)
+      }
+    } catch {
+      alert('Failed to delete account. Please try again.')
+      setIsDeletingAccount(false)
+    }
+  }
+
+  async function handleDownloadAllData() {
+    // Aggregate all user data from available APIs and download as JSON
+    try {
+      const [aliasRes, phoneRes, passwordRes] = await Promise.all([
+        fetch('/api/email-aliases').then(r => r.json()),
+        fetch('/api/phone').then(r => r.json()),
+        fetch('/api/passwords').then(r => r.json()),
+      ])
+      const profileRes = await fetch('/api/user/profile').then(r => r.json())
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        profile: profileRes.data ?? profileRes,
+        emailAliases: aliasRes.data ?? aliasRes,
+        virtualPhones: phoneRes.data ?? phoneRes,
+        passwords: (passwordRes.data?.items ?? []).map((p: Record<string, unknown>) => ({ ...p, password: '***REDACTED***' })),
+      }
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `shield-data-export-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Failed to export data. Please try again.')
+    }
   }
 
   function addPhone() {
@@ -414,7 +488,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 <Label>Current Password</Label>
                 <div className="relative">
-                  <Input type={showPassword ? 'text' : 'password'} className="bg-zinc-800 border-zinc-700 pr-10" />
+                  <Input type={showPassword ? 'text' : 'password'} value={currentPw} onChange={e => setCurrentPw(e.target.value)} className="bg-zinc-800 border-zinc-700 pr-10" />
                   <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -423,7 +497,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 <Label>New Password</Label>
                 <div className="relative">
-                  <Input type={showNewPassword ? 'text' : 'password'} className="bg-zinc-800 border-zinc-700 pr-10" />
+                  <Input type={showNewPassword ? 'text' : 'password'} value={newPw} onChange={e => setNewPw(e.target.value)} className="bg-zinc-800 border-zinc-700 pr-10" />
                   <button onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300">
                     {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -431,9 +505,10 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Confirm New Password</Label>
-                <Input type="password" className="bg-zinc-800 border-zinc-700" />
+                <Input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} className="bg-zinc-800 border-zinc-700" />
               </div>
-              <Button onClick={() => saveSection('password')} className="bg-violet-600 hover:bg-violet-700">
+              {pwError && <p className="text-sm text-red-400">{pwError}</p>}
+              <Button onClick={handleChangePassword} className="bg-violet-600 hover:bg-violet-700">
                 {saved === 'password' ? <><Check className="w-4 h-4 mr-2" /> Updated!</> : 'Update Password'}
               </Button>
             </CardContent>
@@ -835,7 +910,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800">
+              <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800" onClick={handleDownloadAllData}>
                 <Download className="w-4 h-4 mr-2" />
                 Download My Data
               </Button>
@@ -936,10 +1011,11 @@ export default function SettingsPage() {
                     <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
                     <Button
                       variant="destructive"
-                      disabled={deleteConfirm !== 'DELETE'}
+                      disabled={deleteConfirm !== 'DELETE' || isDeletingAccount}
                       className="bg-red-700 hover:bg-red-600 disabled:opacity-40"
+                      onClick={handleDeleteAccount}
                     >
-                      Permanently Delete
+                      {isDeletingAccount ? 'Deleting…' : 'Permanently Delete'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>

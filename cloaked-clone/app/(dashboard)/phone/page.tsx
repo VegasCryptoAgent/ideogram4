@@ -23,7 +23,6 @@ import {
   Lock,
   ChevronRight,
   Radio,
-  Mic,
   Eye,
   Trash2,
 } from "lucide-react";
@@ -34,6 +33,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "next-auth/react";
+import { MAX_VIRTUAL_PHONES } from "@/lib/constants";
+import type { PlanId } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,43 +63,32 @@ interface CallLogEntry {
   createdAt: string;
 }
 
-type InterceptionStep = "ringing" | "analyzing" | "result";
-
 interface CallGuardSettings {
   blockUnknown: boolean;
   screenRobocalls: boolean;
-  requireCallerId: boolean;
-  voicemailTranscription: boolean;
 }
 
-// ─── Interception animation steps ─────────────────────────────────────────────
+// A real screened call surfaced from the user's own call logs
+interface ScreenedCall {
+  id: string;
+  from: string;
+  isSpam: boolean;
+  reason: string;
+  blockedAt: string;
+}
 
-const INTERCEPTION_STEPS: Array<{
-  step: InterceptionStep;
-  label: string;
-  sublabel: string;
-  color: string;
-}> = [
-  {
-    step: "ringing",
-    label: "Incoming call from +1 (702) 555-0182",
-    sublabel: "Shield intercepted the call before it reached you",
-    color: "text-blue-400",
-  },
-  {
-    step: "analyzing",
-    label: "Analyzing caller...",
-    sublabel:
-      "Checking against 47M known spam numbers... Robocall detected",
-    color: "text-yellow-400",
-  },
-  {
-    step: "result",
-    label: "BLOCKED — Saved you from answering",
-    sublabel: "Call permanently silenced. You were never disturbed.",
-    color: "text-green-400",
-  },
-];
+function callTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
 
 // ─── Page Component ───────────────────────────────────────────────────────────
 
@@ -120,8 +110,9 @@ export default function PhonePage() {
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [callLogsLoading, setCallLogsLoading] = useState(false);
 
-  const [interceptionStepIdx, setInterceptionStepIdx] = useState(0);
   const [spamStats, setSpamStats] = useState({ callsScreened: 0, spamBlockRate: 0, robocallsReached: 0 });
+  const [recentScreened, setRecentScreened] = useState<ScreenedCall[]>([]);
+  const [planId, setPlanId] = useState<PlanId>("starter");
 
   useEffect(() => {
     fetch('/api/spam/stats')
@@ -133,16 +124,57 @@ export default function PhonePage() {
           spamBlockRate: s.callBlockRate ?? 0,
           robocallsReached: Math.max(0, (s.totalCallsReceived ?? 0) - (s.totalSpamCallsBlocked ?? 0)),
         })
+        const calls = json.data?.recentBlocked?.calls ?? []
+        setRecentScreened(
+          calls.slice(0, 5).map((c: { id: string; from: string; spamScore?: number | null; createdAt: string }) => ({
+            id: c.id,
+            from: c.from,
+            isSpam: true,
+            reason:
+              typeof c.spamScore === "number"
+                ? `Spam score ${Math.round(c.spamScore)}%`
+                : "Flagged as spam",
+            blockedAt: callTimeAgo(c.createdAt),
+          }))
+        )
+      }).catch(() => {})
+
+    // Real subscription plan → drives the virtual-number limit display
+    fetch('/api/subscription')
+      .then(r => r.json())
+      .then(json => {
+        const p = json.data?.planId ?? json.planId
+        if (p) setPlanId(p as PlanId)
+      }).catch(() => {})
+
+    // Real Call Guard settings from the spam-filter settings
+    fetch('/api/spam/settings')
+      .then(r => r.json())
+      .then(json => {
+        const d = json.data ?? json
+        setCallGuardSettings({
+          blockUnknown: d.blockUnknownCallers ?? false,
+          screenRobocalls: d.blockRobocalls ?? true,
+        })
       }).catch(() => {})
   }, [])
 
   const [callGuardSettings, setCallGuardSettings] =
     useState<CallGuardSettings>({
-      blockUnknown: true,
+      blockUnknown: false,
       screenRobocalls: true,
-      requireCallerId: false,
-      voicemailTranscription: true,
     });
+
+  // Persist a Call Guard setting change to the real spam-settings API
+  const updateCallGuard = useCallback((key: keyof CallGuardSettings, value: boolean) => {
+    setCallGuardSettings((prev) => ({ ...prev, [key]: value }));
+    const field = key === "blockUnknown" ? "blockUnknownCallers" : "blockRobocalls";
+    fetch('/api/spam/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    }).catch(() => {});
+  }, []);
 
   // ── Fetch phones from API ──────────────────────────────────────────────────
 
@@ -166,15 +198,6 @@ export default function PhonePage() {
   useEffect(() => {
     if (session) fetchPhones();
   }, [session, fetchPhones]);
-
-  // ── Cycle the interception animation every 6 seconds ──────────────────────
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setInterceptionStepIdx((prev) => (prev + 1) % INTERCEPTION_STEPS.length);
-    }, 6000);
-    return () => clearInterval(id);
-  }, []);
 
   // ── Copy to clipboard ─────────────────────────────────────────────────────
 
@@ -292,7 +315,9 @@ export default function PhonePage() {
   const totalSpamBlocked = phones.reduce((sum, p) => sum + p.spamBlocked, 0);
   const totalCallsReceived = phones.reduce((sum, p) => sum + p.callsReceived, 0);
 
-  const currentStep = INTERCEPTION_STEPS[interceptionStepIdx];
+  const hasActiveGuard = phones.some((p) => p.isActive);
+  const phoneLimit = MAX_VIRTUAL_PHONES[planId];
+  const planLabel = planId.charAt(0).toUpperCase() + planId.slice(1);
 
   // ── Loading / error states ────────────────────────────────────────────────
 
@@ -365,117 +390,75 @@ export default function PhonePage() {
 
       {/* ── AI Call Guard ── */}
       <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-        {/* Header bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-green-500/5">
+        {/* Header bar — reflects whether any active number is being screened */}
+        <div className={`flex items-center justify-between px-6 py-4 border-b border-white/10 ${hasActiveGuard ? "bg-green-500/5" : "bg-white/5"}`}>
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-3 h-3 rounded-full bg-green-400" />
-              <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-60" />
+              <div className={`w-3 h-3 rounded-full ${hasActiveGuard ? "bg-green-400" : "bg-white/30"}`} />
+              {hasActiveGuard && (
+                <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-60" />
+              )}
             </div>
-            <span className="font-semibold text-white">Call Guard Active</span>
-            <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-              AI Screening ON
+            <span className="font-semibold text-white">
+              {hasActiveGuard ? "Call Guard Active" : "Call Guard Inactive"}
+            </span>
+            <Badge
+              className={
+                hasActiveGuard
+                  ? "bg-green-500/20 text-green-300 border-green-500/30 text-xs"
+                  : "bg-white/10 text-white/50 border-white/20 text-xs"
+              }
+            >
+              {hasActiveGuard ? "Screening ON" : "No active numbers"}
             </Badge>
           </div>
           <span className="text-xs text-white/40">
-            AI is screening all incoming calls
+            {hasActiveGuard
+              ? "Screening incoming calls on your active numbers"
+              : "Add or activate a number to start screening"}
           </span>
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Live interception visual */}
+          {/* Recently screened — real spam calls blocked on the user's numbers */}
           <div className="rounded-xl border border-white/10 bg-black/30 p-5">
             <div className="text-xs text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
               <Radio className="w-3 h-3" />
-              Live interception
+              Recently screened
             </div>
 
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={interceptionStepIdx}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.4 }}
-                className="flex items-start gap-4"
-              >
-                {/* Animated icon */}
-                <div className="shrink-0 mt-1">
-                  {currentStep.step === "ringing" && (
-                    <motion.div
-                      animate={{ rotate: [0, -12, 12, -12, 12, 0] }}
-                      transition={{
-                        duration: 0.6,
-                        repeat: Infinity,
-                        repeatDelay: 1.4,
-                      }}
-                      className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center"
-                    >
-                      <Phone className="w-5 h-5 text-blue-400" />
-                    </motion.div>
-                  )}
-                  {currentStep.step === "analyzing" && (
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 0.8, repeat: Infinity }}
-                      className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center"
-                    >
-                      <Bot className="w-5 h-5 text-yellow-400" />
-                    </motion.div>
-                  )}
-                  {currentStep.step === "result" && (
-                    <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                      <ShieldOff className="w-5 h-5 text-green-400" />
+            {recentScreened.length === 0 ? (
+              <div className="flex items-center gap-3 py-2 text-sm text-white/40">
+                <ShieldOff className="w-5 h-5 text-white/20 shrink-0" />
+                <span>
+                  No screened calls yet. Spam and robocalls blocked on your virtual
+                  numbers will appear here.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentScreened.map((call) => (
+                  <div
+                    key={call.id}
+                    className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2.5"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
+                      <ShieldOff className="w-4 h-4 text-red-400" />
                     </div>
-                  )}
-                </div>
-
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <p className={`font-semibold text-sm mb-1 ${currentStep.color}`}>
-                    {currentStep.label}
-                  </p>
-                  <p className="text-xs text-white/50 leading-relaxed">
-                    {currentStep.sublabel}
-                  </p>
-
-                  {/* Step progress dots */}
-                  <div className="flex gap-1.5 mt-3">
-                    {INTERCEPTION_STEPS.map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-1 rounded-full transition-all duration-500 ${
-                          i === interceptionStepIdx
-                            ? "w-6 bg-green-400"
-                            : i < interceptionStepIdx
-                            ? "w-2 bg-white/30"
-                            : "w-2 bg-white/10"
-                        }`}
-                      />
-                    ))}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{call.from}</p>
+                      <p className="text-xs text-white/40 truncate">{call.reason}</p>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      <span className="text-xs bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded-full">
+                        Blocked
+                      </span>
+                      <span className="text-[10px] text-white/30">{call.blockedAt}</span>
+                    </div>
                   </div>
-                </div>
-
-                {/* Status pill */}
-                <div className="shrink-0">
-                  {currentStep.step === "ringing" && (
-                    <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-1 rounded-full">
-                      Intercepted
-                    </span>
-                  )}
-                  {currentStep.step === "analyzing" && (
-                    <span className="text-xs bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-1 rounded-full animate-pulse">
-                      Scanning...
-                    </span>
-                  )}
-                  {currentStep.step === "result" && (
-                    <span className="text-xs bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-1 rounded-full">
-                      Protected
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            </AnimatePresence>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Call Guard stats row */}
@@ -516,16 +499,6 @@ export default function PhonePage() {
                     label: "Screen robocalls",
                     icon: Bot,
                   },
-                  {
-                    key: "requireCallerId" as const,
-                    label: "Require caller ID",
-                    icon: Eye,
-                  },
-                  {
-                    key: "voicemailTranscription" as const,
-                    label: "Voicemail transcription",
-                    icon: Mic,
-                  },
                 ]
               ).map(({ key, label, icon: Icon }) => (
                 <div
@@ -538,9 +511,7 @@ export default function PhonePage() {
                   </div>
                   <Switch
                     checked={callGuardSettings[key]}
-                    onCheckedChange={(v) =>
-                      setCallGuardSettings((prev) => ({ ...prev, [key]: v }))
-                    }
+                    onCheckedChange={(v) => updateCallGuard(key, v)}
                   />
                 </div>
               ))}
@@ -788,12 +759,16 @@ export default function PhonePage() {
       {/* ── Plan info ── */}
       <div className="bg-violet-600/10 border border-violet-500/20 rounded-xl p-4 flex items-center justify-between">
         <div className="text-sm text-white/60">
-          <span className="font-semibold text-white">{phones.length}/3</span>{" "}
-          virtual numbers on Pro plan
+          <span className="font-semibold text-white">
+            {phones.length}/{phoneLimit === -1 ? "∞" : phoneLimit}
+          </span>{" "}
+          virtual numbers on {planLabel} plan
         </div>
-        <Button variant="outline" size="sm">
-          Upgrade for more
-        </Button>
+        {phoneLimit !== -1 && (
+          <Button variant="outline" size="sm" asChild>
+            <a href="/settings?tab=billing">Upgrade for more</a>
+          </Button>
+        )}
       </div>
 
       {/* ── Add Number Modal ── */}

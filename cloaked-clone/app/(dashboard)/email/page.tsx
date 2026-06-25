@@ -171,6 +171,19 @@ export default function EmailPage() {
       const json = await res.json();
       const raw: ApiEmailAlias[] = json.data ?? json;
       setAliases(raw.map(mapApiAlias));
+      // Derive identities from aliases that have a label — they were created as identities
+      const colors = ["bg-blue-500","bg-purple-500","bg-green-500","bg-pink-500","bg-amber-500","bg-cyan-500"];
+      const idAliases = raw.filter(a => a.label);
+      setIdentities(idAliases.map((a, i) => ({
+        id: a.id,
+        name: a.label!,
+        emailAlias: a.alias,
+        phoneAlias: null,
+        avatarColor: colors[i % colors.length],
+        totalEmails: a.emailsReceived,
+        spamRate: a.emailsReceived > 0 ? Math.round((a.spamBlocked / a.emailsReceived) * 100) : 0,
+        status: a.isActive ? "active" : "paused",
+      })));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load aliases");
     } finally {
@@ -276,32 +289,44 @@ export default function EmailPage() {
     }
   }, [newLabel, newForwardTo, newSource]);
 
-  const handleCreateIdentity = useCallback(() => {
+  const handleCreateIdentity = useCallback(async () => {
     if (!newIdentityName.trim()) return;
-    const slug = newIdentityName.toLowerCase().replace(/[^a-z0-9]/g, "-");
     const colors = [
-      "bg-blue-500",
-      "bg-purple-500",
-      "bg-green-500",
-      "bg-pink-500",
-      "bg-amber-500",
-      "bg-cyan-500",
+      "bg-blue-500", "bg-purple-500", "bg-green-500",
+      "bg-pink-500", "bg-amber-500", "bg-cyan-500",
     ];
-    const newId: Identity = {
-      id: Date.now().toString(),
-      name: newIdentityName,
-      emailAlias: `${slug}@shield.app`,
-      phoneAlias: newIdentityPhone || null,
-      avatarColor: colors[Math.floor(Math.random() * colors.length)],
-      totalEmails: 0,
-      spamRate: 0,
-      status: "active",
-    };
-    setIdentities((prev) => [...prev, newId]);
-    setNewIdentityName("");
-    setNewIdentityPhone("");
-    setIsIdentityOpen(false);
-  }, [newIdentityName, newIdentityPhone]);
+    try {
+      // Persist the identity as a real email alias with the identity name as label
+      const res = await fetch("/api/email-aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: newIdentityName.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error ?? "Failed to create identity");
+        return;
+      }
+      const created = json.data ?? json;
+      const colorIdx = identities.length % colors.length;
+      const newId: Identity = {
+        id: created.id,
+        name: newIdentityName.trim(),
+        emailAlias: created.alias,
+        phoneAlias: newIdentityPhone || null,
+        avatarColor: colors[colorIdx],
+        totalEmails: 0,
+        spamRate: 0,
+        status: "active",
+      };
+      setIdentities((prev) => [...prev, newId]);
+      setNewIdentityName("");
+      setNewIdentityPhone("");
+      setIsIdentityOpen(false);
+    } catch {
+      alert("Failed to create identity. Please try again.");
+    }
+  }, [newIdentityName, newIdentityPhone, identities.length]);
 
   // ── Export CSV ──
   const handleExportCSV = useCallback(() => {

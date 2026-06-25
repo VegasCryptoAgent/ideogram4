@@ -24,7 +24,6 @@ import {
   X,
   Zap,
   Fingerprint,
-  UserPlus,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -96,8 +95,49 @@ function getPasswordStrength(pwd: string): {
   return { score, label: "Strong", color: "bg-green-500" };
 }
 
-function generateRandomCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+// Base32 decode for TOTP secrets (RFC-4648)
+function base32ToBytes(base32: string): Uint8Array {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const cleaned = base32.toUpperCase().replace(/=+$/, "");
+  let bits = 0, value = 0;
+  const output: number[] = [];
+  for (const char of cleaned) {
+    const idx = alphabet.indexOf(char);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return new Uint8Array(output);
+}
+
+// Real RFC-6238 TOTP computation via Web Crypto
+async function computeTotp(secret: string, seconds: number): Promise<string> {
+  try {
+    const keyBytes = base32ToBytes(secret);
+    const counter = Math.floor(Math.floor(Date.now() / 1000) / 30);
+    const counterBuf = new ArrayBuffer(8);
+    const view = new DataView(counterBuf);
+    view.setUint32(4, counter, false);
+    const key = await crypto.subtle.importKey(
+      "raw", keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer,
+      { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, counterBuf);
+    const arr = new Uint8Array(sig);
+    const offset = arr[19] & 0xf;
+    const code =
+      ((arr[offset] & 0x7f) << 24 |
+       (arr[offset + 1] & 0xff) << 16 |
+       (arr[offset + 2] & 0xff) << 8 |
+       (arr[offset + 3] & 0xff)) % 1_000_000;
+    return String(code).padStart(6, "0");
+  } catch {
+    return "------";
+  }
 }
 
 // ─── Strength Badge ───────────────────────────────────────────────────────────
@@ -124,20 +164,27 @@ function StrengthBadge({ strength }: { strength: PasswordEntry["strength"] }) {
 
 // ─── TOTP Cell ────────────────────────────────────────────────────────────────
 
-function TotpCell({ entryId }: { entryId: string }) {
-  const [code, setCode] = useState(() => generateRandomCode());
+function TotpCell({ totpSecret }: { totpSecret?: string | null }) {
+  const [code, setCode] = useState("------");
   const [seconds, setSeconds] = useState(() => 30 - (Math.floor(Date.now() / 1000) % 30));
 
   useEffect(() => {
+    if (!totpSecret) return;
+
+    // Compute initial code immediately
+    computeTotp(totpSecret, seconds).then(setCode);
+
     const interval = setInterval(() => {
       const secs = 30 - (Math.floor(Date.now() / 1000) % 30);
       setSeconds(secs);
       if (secs === 30) {
-        setCode(generateRandomCode());
+        // New 30-second window — recompute
+        computeTotp(totpSecret, secs).then(setCode);
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totpSecret]);
 
   const radius = 8;
   const circumference = 2 * Math.PI * radius;
@@ -441,6 +488,7 @@ function AddPasswordModal({
   const [newNotes, setNewNotes] = useState("");
   const [newTags, setNewTags] = useState("");
   const [enable2FA, setEnable2FA] = useState(false);
+  const [totpSecretInput, setTotpSecretInput] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [genLength, setGenLength] = useState(16);
@@ -498,6 +546,7 @@ function AddPasswordModal({
       password: newPassword,
       strength: strengthMap[pwStrength.label] ?? "weak",
       hasTotp: enable2FA,
+      totpSecret: enable2FA && totpSecretInput.trim() ? totpSecretInput.trim() : undefined,
       lastUpdated: "Just now",
       tags: newTags
         .split(",")
@@ -771,8 +820,22 @@ function AddPasswordModal({
               <div className="text-sm font-medium text-white">Enable 2FA</div>
               <div className="text-xs text-zinc-500 mt-0.5">Store a TOTP authenticator code</div>
             </div>
-            <Switch checked={enable2FA} onCheckedChange={setEnable2FA} />
+            <Switch checked={enable2FA} onCheckedChange={(v) => { setEnable2FA(v); if (!v) setTotpSecretInput(""); }} />
           </div>
+          {enable2FA && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-400">TOTP Secret Key</Label>
+              <Input
+                value={totpSecretInput}
+                onChange={(e) => setTotpSecretInput(e.target.value.replace(/\s/g, "").toUpperCase())}
+                placeholder="Paste the Base32 secret from your app (e.g. JBSWY3DPEHPK3PXP)"
+                className="bg-white/5 border-white/10 text-white font-mono text-xs placeholder:normal-case placeholder:font-sans"
+              />
+              <p className="text-[11px] text-zinc-500">
+                Scan the QR code in your authenticator app, then paste the text secret shown below the QR code.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -873,8 +936,10 @@ function PasswordRow({
 
         {/* TOTP */}
         <td className="px-4 py-3 hidden lg:table-cell">
-          {entry.hasTotp ? (
-            <TotpCell entryId={entry.id} />
+          {entry.hasTotp && entry.totpSecret ? (
+            <TotpCell totpSecret={entry.totpSecret} />
+          ) : entry.hasTotp ? (
+            <span className="text-xs text-orange-400/70">Secret needed</span>
           ) : (
             <span className="text-zinc-600 text-xs">—</span>
           )}
@@ -1016,6 +1081,7 @@ function mapApiEntry(e: {
     password: e.password ?? e.encryptedPassword ?? '',
     strength: (e.strength as PasswordEntry['strength']) ?? 'medium',
     hasTotp: e.hasTotp,
+    totpSecret: e.totpSecret ?? undefined,
     lastUpdated: new Date(e.updatedAt).toLocaleDateString(),
     tags: e.tags ?? [],
     notes: e.notes ?? undefined,
@@ -1083,9 +1149,10 @@ export default function PasswordsPage() {
         site: entry.site,
         url: entry.url,
         username: entry.username,
-        encryptedPassword: entry.password,
+        password: entry.password,
         strength: entry.strength,
         hasTotp: entry.hasTotp,
+        totpSecret: entry.totpSecret,
         tags: entry.tags,
         notes: entry.notes,
       }),
@@ -1220,83 +1287,25 @@ export default function PasswordsPage() {
             </Button>
           </div>
 
-          {/* Vault cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {vaults.map((vault, vi) => {
-              const gradients = [
-                "from-violet-600/20 to-violet-900/10 border-violet-500/30",
-                "from-blue-600/20 to-blue-900/10 border-blue-500/30",
-              ];
-              const iconColors = ["text-violet-400", "text-blue-400"];
-              const iconBgs = ["bg-violet-600/30", "bg-blue-600/30"];
-              const btnColors = ["bg-violet-600 hover:bg-violet-700", "bg-blue-600 hover:bg-blue-700"];
-
-              return (
-                <motion.div
-                  key={vault.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: vi * 0.08 }}
-                  className={`bg-gradient-to-br ${gradients[vi % gradients.length]} border rounded-2xl p-5 space-y-4`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-white text-base">{vault.name}</h3>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="inline-flex items-center text-xs font-medium text-zinc-400 bg-white/10 rounded-full px-2.5 py-0.5">
-                          {vault.itemCount} items
-                        </span>
-                        <span className="text-xs text-zinc-500">Created {vault.createdAt}</span>
-                      </div>
-                    </div>
-                    <div className={`w-10 h-10 rounded-xl ${iconBgs[vi % iconBgs.length]} flex items-center justify-center`}>
-                      <Shield className={`w-5 h-5 ${iconColors[vi % iconColors.length]}`} />
-                    </div>
-                  </div>
-
-                  {/* Members */}
-                  <div>
-                    <div className="text-xs text-zinc-500 mb-2">Members</div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex -space-x-2">
-                        {vault.members.map((member) => (
-                          <div
-                            key={member.name}
-                            className={`w-8 h-8 rounded-full ${member.color} border-2 border-zinc-900 flex items-center justify-center text-white text-[10px] font-bold`}
-                            title={member.name}
-                          >
-                            {member.initials}
-                          </div>
-                        ))}
-                      </div>
-                      <span className="text-xs text-zinc-400">
-                        {vault.members.map((m) => m.name).join(", ")}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      className={`flex-1 text-xs font-semibold text-white ${btnColors[vi % btnColors.length]}`}
-                    >
-                      Open Vault
-                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 bg-white/5 hover:bg-white/10 text-white text-xs"
-                    >
-                      <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                      Manage Members
-                    </Button>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
+          {/* Shared vaults empty state */}
+          <Card className="border-white/10 bg-white/5">
+            <CardContent className="py-14 flex flex-col items-center text-center">
+              <Shield className="w-16 h-16 text-zinc-600 mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">No shared vaults yet</h3>
+              <p className="text-sm text-zinc-400 max-w-sm mb-6 leading-relaxed">
+                Create a vault to securely share passwords with family or teammates.
+                All sharing is end-to-end encrypted — no one else can read your secrets.
+              </p>
+              <Button
+                variant="outline"
+                className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                onClick={() => setShowCreateVault(true)}
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Create Your First Vault
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── Tab 3: Security Keys ── */}

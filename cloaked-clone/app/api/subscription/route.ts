@@ -64,6 +64,13 @@ export async function GET(): Promise<NextResponse> {
             cancelAt: stripeSubscription.cancel_at
               ? new Date(stripeSubscription.cancel_at * 1000)
               : null,
+            card: (() => {
+              const pm = stripeSubscription.default_payment_method;
+              if (pm && typeof pm === 'object' && 'card' in pm && pm.card) {
+                return { brand: (pm.card as { brand?: string }).brand, last4: (pm.card as { last4?: string }).last4 };
+              }
+              return null;
+            })(),
           }
         : null,
     });

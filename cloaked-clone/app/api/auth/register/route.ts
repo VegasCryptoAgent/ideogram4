@@ -3,7 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
-import { scannerQueue } from '@/lib/queues';
+import { runScanJob } from '@/lib/scan-processor';
 import { errorResponse, createdResponse, handleZodError } from '@/lib/api-helpers';
 
 const registerSchema = z.object({
@@ -103,19 +103,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       10000
     );
 
-    // Fire-and-forget: queue initial scan without blocking the response
+    // Fire-and-forget: run the initial scan inline without blocking the response.
+    // Railway is single-process (no BullMQ worker), so we invoke the scan
+    // processor directly rather than enqueueing.
     Promise.resolve().then(async () => {
       try {
         const scanJob = await prisma.scanJob.create({
           data: { userId: user.id, status: 'pending' },
         });
-        await scannerQueue.add(
-          'initial-scan',
-          { userId: user.id, scanJobId: scanJob.id },
-          { jobId: `initial-scan-${user.id}`, delay: 5000 }
-        );
-      } catch (queueErr) {
-        console.error('[Register] Failed to trigger initial scan (non-fatal):', queueErr);
+        await runScanJob(user.id, scanJob.id);
+      } catch (scanErr) {
+        console.error('[Register] Failed to run initial scan (non-fatal):', scanErr);
       }
     });
 

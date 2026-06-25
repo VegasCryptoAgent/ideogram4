@@ -74,6 +74,7 @@ export async function GET() {
       password: decrypt(e.encryptedPassword, session.id),
       strength: e.strength,
       hasTotp: e.hasTotp,
+      totpSecret: e.totpSecret ? decrypt(e.totpSecret, session.id) : null,
       tags: e.tags,
       notes: e.notes,
       breached: e.breached,
@@ -101,11 +102,12 @@ export async function POST(req: Request) {
     })
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues }, { status: 400 })
 
-    const { password, ...rest } = parsed.data
+    const { password, totpSecret, ...rest } = parsed.data
     const entry = await prisma.passwordEntry.create({
       data: {
         userId: session.id,
         encryptedPassword: encrypt(password, session.id),
+        totpSecret: totpSecret ? encrypt(totpSecret, session.id) : undefined,
         ...rest,
       },
     })

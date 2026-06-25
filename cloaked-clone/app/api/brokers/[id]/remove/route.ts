@@ -4,8 +4,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { optOutQueue } from '@/lib/queues';
-import { createNotification } from '@/services/notification-service';
+import { runOptOutJob } from '@/lib/optout-processor';
 import { getAuthenticatedUser, successResponse, errorResponse } from '@/lib/api-helpers';
 
 type Params = { params: Promise<{ id: string }> };
@@ -45,34 +44,22 @@ export async function POST(_req: NextRequest, { params }: Params): Promise<NextR
       );
     }
 
-    // Update record status
-    const updated = await prisma.brokerRecord.update({
+    // Fire the opt-out inline (fire-and-forget). runOptOutJob performs the real
+    // opt-out (email / broker API), then transitions the record to
+    // 'removal_requested' and creates the confirmation notification itself.
+    // No BullMQ worker runs on Railway's single-process deployment, so we must
+    // NOT enqueue — we run it directly.
+    void runOptOutJob(session.id, brokerId, record.id);
+
+    // Return an optimistic record so the UI updates immediately while the
+    // opt-out completes in the background.
+    const updated = await prisma.brokerRecord.findUnique({
       where: { id: record.id },
-      data: {
-        status: 'removal_requested',
-        requestedAt: new Date(),
-      },
       include: { broker: { select: { name: true, website: true, category: true } } },
     });
 
-    // Queue opt-out job
-    await optOutQueue.add(
-      'opt-out',
-      { userId: session.id, brokerId, recordId: record.id },
-      { jobId: `opt-out-${session.id}-${brokerId}`, priority: 1 }
-    );
-
-    // Create in-app notification
-    await createNotification(
-      session.id,
-      'record_found',
-      `Removal requested from ${broker.name}`,
-      `We've submitted a removal request to ${broker.name}. This typically takes ${broker.avgRemovalDays} days.`,
-      { brokerId, brokerName: broker.name, recordId: record.id }
-    );
-
     return successResponse({
-      record: updated,
+      record: { ...updated, status: 'removal_requested', requestedAt: new Date() },
       message: `Removal request submitted to ${broker.name}. Estimated completion: ${broker.avgRemovalDays} days.`,
     });
   } catch (err) {

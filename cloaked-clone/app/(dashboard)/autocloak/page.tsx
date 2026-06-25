@@ -32,7 +32,7 @@ interface SiteEntry {
 
 const SITES_DATA: SiteEntry[] = [
   // SHOPPING
-  { id: "amazon", name: "Amazon", category: "SHOPPING", enabled: true },
+  { id: "amazon", name: "Amazon", category: "SHOPPING", enabled: false },
   { id: "ebay", name: "eBay", category: "SHOPPING", enabled: false },
   { id: "etsy", name: "Etsy", category: "SHOPPING", enabled: false },
   { id: "walmart", name: "Walmart", category: "SHOPPING", enabled: false },
@@ -45,19 +45,19 @@ const SITES_DATA: SiteEntry[] = [
   { id: "asos", name: "ASOS", category: "SHOPPING", enabled: false },
   { id: "shein", name: "Shein", category: "SHOPPING", enabled: false },
   // STREAMING
-  { id: "netflix", name: "Netflix", category: "STREAMING", enabled: true },
+  { id: "netflix", name: "Netflix", category: "STREAMING", enabled: false },
   { id: "hulu", name: "Hulu", category: "STREAMING", enabled: false },
   { id: "disneyplus", name: "Disney+", category: "STREAMING", enabled: false },
   { id: "hbomax", name: "HBO Max", category: "STREAMING", enabled: false },
-  { id: "spotify", name: "Spotify", category: "STREAMING", enabled: true },
+  { id: "spotify", name: "Spotify", category: "STREAMING", enabled: false },
   { id: "appletv", name: "Apple TV+", category: "STREAMING", enabled: false },
   { id: "peacock", name: "Peacock", category: "STREAMING", enabled: false },
   { id: "paramount", name: "Paramount+", category: "STREAMING", enabled: false },
   // SOCIAL
-  { id: "instagram", name: "Instagram", category: "SOCIAL", enabled: true },
+  { id: "instagram", name: "Instagram", category: "SOCIAL", enabled: false },
   { id: "tiktok", name: "TikTok", category: "SOCIAL", enabled: false },
   { id: "twitter", name: "Twitter/X", category: "SOCIAL", enabled: false },
-  { id: "linkedin", name: "LinkedIn", category: "SOCIAL", enabled: true },
+  { id: "linkedin", name: "LinkedIn", category: "SOCIAL", enabled: false },
   { id: "facebook", name: "Facebook", category: "SOCIAL", enabled: false },
   { id: "reddit", name: "Reddit", category: "SOCIAL", enabled: false },
   { id: "pinterest", name: "Pinterest", category: "SOCIAL", enabled: false },
@@ -70,7 +70,7 @@ const SITES_DATA: SiteEntry[] = [
   { id: "postmates", name: "Postmates", category: "FOOD DELIVERY", enabled: false },
   { id: "caviar", name: "Caviar", category: "FOOD DELIVERY", enabled: false },
   // TRAVEL
-  { id: "airbnb", name: "Airbnb", category: "TRAVEL", enabled: true },
+  { id: "airbnb", name: "Airbnb", category: "TRAVEL", enabled: false },
   { id: "booking", name: "Booking.com", category: "TRAVEL", enabled: false },
   { id: "expedia", name: "Expedia", category: "TRAVEL", enabled: false },
   { id: "hotels", name: "Hotels.com", category: "TRAVEL", enabled: false },
@@ -102,9 +102,9 @@ const SITES_DATA: SiteEntry[] = [
   // OTHER
   { id: "dropbox", name: "Dropbox", category: "OTHER", enabled: false },
   { id: "zoom", name: "Zoom", category: "OTHER", enabled: false },
-  { id: "slack", name: "Slack", category: "OTHER", enabled: true },
-  { id: "github", name: "GitHub", category: "OTHER", enabled: true },
-  { id: "notion", name: "Notion", category: "OTHER", enabled: true },
+  { id: "slack", name: "Slack", category: "OTHER", enabled: false },
+  { id: "github", name: "GitHub", category: "OTHER", enabled: false },
+  { id: "notion", name: "Notion", category: "OTHER", enabled: false },
   { id: "figma", name: "Figma", category: "OTHER", enabled: false },
   { id: "canva", name: "Canva", category: "OTHER", enabled: false },
   { id: "duolingo", name: "Duolingo", category: "OTHER", enabled: false },
@@ -165,6 +165,23 @@ export default function AutoCloakPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([])
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // Detect the Shield browser extension. Extensions announce themselves by
+  // setting a window flag and/or posting a ready message from their content
+  // script — we listen for both. If neither fires, it's genuinely not installed.
+  useEffect(() => {
+    if (typeof window !== "undefined" &&
+        (window as unknown as { __shieldExtensionInstalled?: boolean }).__shieldExtensionInstalled) {
+      setExtensionInstalled(true)
+    }
+    const onMsg = (e: MessageEvent) => {
+      if (e.source === window && (e.data as { type?: string })?.type === "SHIELD_EXTENSION_READY") {
+        setExtensionInstalled(true)
+      }
+    }
+    window.addEventListener("message", onMsg)
+    return () => window.removeEventListener("message", onMsg)
+  }, [])
 
   // Load user's saved autocloak preferences
   useEffect(() => {
@@ -285,19 +302,13 @@ export default function AutoCloakPage() {
               >
                 <Button
                   className="bg-orange-500 hover:bg-orange-600 text-white"
-                  onClick={() => setExtensionInstalled(true)}
+                  asChild
                 >
-                  Install Extension →
+                  <a href="/extension">Install Extension →</a>
                 </Button>
               </motion.div>
             )}
           </AnimatePresence>
-          <span
-            className="cursor-pointer text-xs text-zinc-600 hover:text-zinc-500 transition-colors"
-            onClick={() => setExtensionInstalled((prev) => !prev)}
-          >
-            {extensionInstalled ? "Simulate not installed" : "Simulate installed"}
-          </span>
         </div>
       </div>
 
@@ -353,7 +364,7 @@ export default function AutoCloakPage() {
       {/* Stats Row */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          { label: "Sites Supported", value: "100+", icon: Globe, color: "text-blue-400" },
+          { label: "Sites Supported", value: SITES_DATA.length.toString(), icon: Globe, color: "text-blue-400" },
           { label: "Aliases Auto-Created", value: totalAliases.toString(), icon: Wand2, color: "text-purple-400" },
           { label: "Emails Intercepted", value: totalEmailsBlocked.toString(), icon: Mail, color: "text-green-400" },
           { label: "Sites Enabled", value: enabledCount.toString(), icon: Shield, color: "text-orange-400" },
