@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Wand2,
@@ -156,6 +156,23 @@ export default function AutoCloakPage() {
   const [activityLog, setActivityLog] = useState(ACTIVITY_LOG)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  // Load user's saved autocloak preferences
+  useEffect(() => {
+    fetch('/api/autocloak')
+      .then(r => r.json())
+      .then(json => {
+        const saved: { site: string; enabled: boolean }[] = json.data?.settings ?? []
+        if (saved.length > 0) {
+          const savedMap = Object.fromEntries(saved.map(s => [s.site, s.enabled]))
+          setSites(prev => prev.map(s => ({
+            ...s,
+            enabled: savedMap[s.name] !== undefined ? savedMap[s.name] : s.enabled
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const enabledCount = sites.filter((s) => s.enabled).length
   const totalEmailsBlocked = activityLog.reduce((sum, entry) => sum + entry.emailsBlocked, 0)
   const totalAliases = activityLog.length
@@ -175,9 +192,18 @@ export default function AutoCloakPage() {
   }, {})
 
   const toggleSite = (id: string) => {
-    setSites((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
-    )
+    setSites((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+      const changed = updated.find((s) => s.id === id)
+      if (changed) {
+        fetch('/api/autocloak', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ site: changed.name, enabled: changed.enabled }),
+        }).catch(() => {})
+      }
+      return updated
+    })
   }
 
   const deleteActivityEntry = (id: string) => {

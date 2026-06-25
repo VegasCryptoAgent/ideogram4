@@ -31,18 +31,19 @@ model User {
   planId             String?
   trialEndsAt        DateTime?
 
-  accounts        Account[]
-  sessions        Session[]
-  addresses       UserAddress[]
-  virtualPhones   VirtualPhone[]
-  emailAliases    EmailAlias[]
-  brokerRecords   BrokerRecord[]
-  spamSettings    SpamSettings?
-  notifications   Notification[]
-  breachAlerts    BreachAlert[]
-  scanJobs        ScanJob[]
-  passwordEntries PasswordEntry[]
-  virtualCards    VirtualCard[]
+  accounts           Account[]
+  sessions           Session[]
+  addresses          UserAddress[]
+  virtualPhones      VirtualPhone[]
+  emailAliases       EmailAlias[]
+  brokerRecords      BrokerRecord[]
+  spamSettings       SpamSettings?
+  notifications      Notification[]
+  breachAlerts       BreachAlert[]
+  scanJobs           ScanJob[]
+  passwordEntries    PasswordEntry[]
+  virtualCards       VirtualCard[]
+  autoCloakSettings  AutoCloakSetting[]
 }
 
 model UserAddress {
@@ -283,4 +284,19 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model AutoCloakSetting {
+  id        String   @id @default(cuid())
+  userId    String
+  site      String
+  enabled   Boolean  @default(true)
+  alias     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, site])
+  @@index([userId])
 }

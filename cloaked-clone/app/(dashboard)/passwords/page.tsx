@@ -1109,7 +1109,7 @@ function PasswordRow({
 
 function mapApiEntry(e: {
   id: string; site: string; url?: string | null; username: string;
-  encryptedPassword: string; strength: string; hasTotp: boolean;
+  password?: string; encryptedPassword?: string; strength: string; hasTotp: boolean;
   totpSecret?: string | null; tags: string[]; notes?: string | null;
   breached: boolean; sharedVaultId?: string | null; updatedAt: string;
 }): PasswordEntry {
@@ -1118,7 +1118,7 @@ function mapApiEntry(e: {
     site: e.site,
     url: e.url ?? e.site.toLowerCase().replace(/\s/g, '') + '.com',
     username: e.username,
-    password: e.encryptedPassword,
+    password: e.password ?? e.encryptedPassword ?? '',
     strength: (e.strength as PasswordEntry['strength']) ?? 'medium',
     hasTotp: e.hasTotp,
     lastUpdated: new Date(e.updatedAt).toLocaleDateString(),
@@ -1130,22 +1130,25 @@ function mapApiEntry(e: {
 }
 
 export default function PasswordsPage() {
-  const [passwords, setPasswords] = useState<PasswordEntry[]>(MOCK_PASSWORDS);
-  const [vaults] = useState<SharedVault[]>(MOCK_VAULTS);
+  const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
+  const [vaults] = useState<SharedVault[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCreateVault, setShowCreateVault] = useState(false);
   const [showYubikey, setShowYubikey] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [passwordsLoading, setPasswordsLoading] = useState(true);
 
   const fetchPasswords = useCallback(async () => {
     try {
       const res = await fetch('/api/passwords')
       if (!res.ok) return
       const json = await res.json()
-      const raw: any[] = json.data ?? []
-      if (raw.length > 0) setPasswords(raw.map(mapApiEntry))
-    } catch { /* keep mock data */ }
+      const raw: any[] = json.data?.items ?? json.data ?? []
+      setPasswords(raw.map(mapApiEntry))
+    } catch { /* leave empty */ } finally {
+      setPasswordsLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchPasswords() }, [fetchPasswords])
@@ -1187,9 +1190,9 @@ export default function PasswordsPage() {
     }).catch(() => {})
   }
 
-  const totalCount = passwords.length || 47;
+  const totalCount = passwords.length;
   const weakCount = passwords.filter((p) => p.strength === "weak").length;
-  const reusedCount = 2;
+  const reusedCount = 0;
   const totpCount = passwords.filter((p) => p.hasTotp).length;
 
   return (

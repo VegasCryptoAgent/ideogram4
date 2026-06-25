@@ -121,6 +121,21 @@ export default function PhonePage() {
   const [callLogsLoading, setCallLogsLoading] = useState(false);
 
   const [interceptionStepIdx, setInterceptionStepIdx] = useState(0);
+  const [spamStats, setSpamStats] = useState({ callsScreened: 0, spamBlockRate: 0, robocallsReached: 0 });
+
+  useEffect(() => {
+    fetch('/api/spam/stats')
+      .then(r => r.json())
+      .then(json => {
+        const s = json.data?.summary ?? {}
+        setSpamStats({
+          callsScreened: s.totalCallsReceived ?? 0,
+          spamBlockRate: s.callBlockRate ?? 0,
+          robocallsReached: Math.max(0, (s.totalCallsReceived ?? 0) - (s.totalSpamCallsBlocked ?? 0)),
+        })
+      }).catch(() => {})
+  }, [])
+
   const [callGuardSettings, setCallGuardSettings] =
     useState<CallGuardSettings>({
       blockUnknown: true,
@@ -466,17 +481,9 @@ export default function PhonePage() {
           {/* Call Guard stats row */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              {
-                value: "247",
-                label: "Calls screened this month",
-                icon: Eye,
-              },
-              { value: "94%", label: "Spam blocked", icon: Shield },
-              {
-                value: "0",
-                label: "Robocalls reached you",
-                icon: PhoneMissed,
-              },
+              { value: String(spamStats.callsScreened), label: "Calls screened", icon: Eye },
+              { value: `${spamStats.spamBlockRate}%`, label: "Spam blocked", icon: Shield },
+              { value: String(spamStats.robocallsReached), label: "Robocalls reached you", icon: PhoneMissed },
             ].map(({ value, label, icon: Icon }) => (
               <div
                 key={label}
