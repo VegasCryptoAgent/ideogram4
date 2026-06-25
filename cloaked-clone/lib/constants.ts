@@ -198,15 +198,6 @@ export const DEFAULT_SPAM_SENSITIVITY: SpamSensitivity = "medium";
 export const MAX_ONBOARDING_ADDRESSES = 3;
 export const MAX_ONBOARDING_PHONES = 5;
 
-// --------------- BullMQ Queue Names ---------------
-
-export const QUEUE_NAMES = {
-  SCANNER: "scanner",
-  OPT_OUT: "opt-out",
-  MONITOR: "monitor",
-  NOTIFICATIONS: "notifications",
-} as const;
-
 // --------------- Broker Status Labels ---------------
 
 export const BROKER_STATUS_LABELS: Record<string, string> = {
