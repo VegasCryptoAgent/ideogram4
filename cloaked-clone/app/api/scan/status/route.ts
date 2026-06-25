@@ -61,24 +61,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Attempt to retrieve the currently-scanning broker name from the BullMQ
-    // job progress data stored in Redis. This is a best-effort read — if the
-    // queue connection is unavailable we simply return null.
-    let currentBroker: string | null = null;
-
-    if (job.status === 'running') {
-      try {
-        // Dynamic import so the module isn't bundled on the edge runtime.
-        const { scanQueue } = await import('@/lib/queues');
-        const bullJob = await scanQueue.getJob(`scan:${job.id}`);
-        const progressData = (bullJob?.progress ?? null) as {
-          currentBroker?: string;
-        } | null;
-        currentBroker = progressData?.currentBroker ?? null;
-      } catch {
-        // Queue unavailable — currentBroker stays null.
-      }
-    }
+    // currentBroker is not tracked in the DB (scan runs inline, no queue).
+    const currentBroker: string | null = null;
 
     const payload = {
       jobId: job.id,
