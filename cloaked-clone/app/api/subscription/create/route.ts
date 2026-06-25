@@ -1,6 +1,10 @@
 // ============================================================
 // Shielded Privacy App — Create Stripe Checkout Session
 // POST /api/subscription/create → returns checkout URL
+//
+// Uses inline price_data so no STRIPE_PRICE_* env vars needed.
+// planId is stored in subscription metadata; the webhook reads it
+// from there (no price-ID lookup required).
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -29,10 +33,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { planId } = parsed.data;
     const plan = PLANS[planId];
 
-    if (!plan.stripePriceId) {
-      return errorResponse(`Stripe price ID not configured for plan: ${planId}`, 500);
-    }
-
     const user = await prisma.user.findUnique({
       where: { id: session.id },
       select: { email: true, stripeCustomerId: true, subscriptionId: true, planId: true },
@@ -40,12 +40,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (!user) return errorResponse('User not found', 404);
 
-    // Don't allow resubscription to same plan
     if (user.planId === planId && user.subscriptionId) {
       return errorResponse('You are already subscribed to this plan', 409);
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://shielded.app';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ideogram4-production.up.railway.app';
 
     // Ensure Stripe customer exists
     let customerId = user.stripeCustomerId;
@@ -62,14 +61,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Create Stripe checkout session
+    // Build line item using inline price_data — no STRIPE_PRICE_* env var needed
+    const unitAmount = Math.round(plan.monthlyPrice * 100); // cents
+
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
-      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      success_url: `${appUrl}/dashboard/subscription?success=true&plan=${planId}`,
-      cancel_url: `${appUrl}/dashboard/subscription?canceled=true`,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Shield ${plan.name} Plan`,
+              description: plan.description,
+            },
+            unit_amount: unitAmount,
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${appUrl}/dashboard/settings?tab=billing&success=true&plan=${planId}`,
+      cancel_url: `${appUrl}/dashboard/settings?tab=billing&canceled=true`,
       subscription_data: {
         trial_period_days: 14,
         metadata: { userId: session.id, planId },

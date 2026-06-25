@@ -56,16 +56,18 @@ export default function SettingsPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
+  const [checkoutCanceled, setCheckoutCanceled] = useState(false)
 
   // Billing state (fetched from /api/subscription)
-  const [planName, setPlanName] = useState('Premium')
-  const [planPrice, setPlanPrice] = useState('$9.99')
-  const [nextBillingDate, setNextBillingDate] = useState('Loading...')
+  const [planName, setPlanName] = useState('Free')
+  const [planPrice, setPlanPrice] = useState('')
+  const [nextBillingDate, setNextBillingDate] = useState('—')
   const [cardOnFile, setCardOnFile] = useState('—')
   const [phoneUsage, setPhoneUsage] = useState('—')
   const [aliasUsage, setAliasUsage] = useState('—')
 
-  useEffect(() => {
+  const loadSubscription = () => {
     fetch('/api/subscription')
       .then((r) => r.json())
       .then((json) => {
@@ -73,13 +75,42 @@ export default function SettingsPage() {
         setPlanName(d.planName ?? 'Free')
         if (d.stripe?.currentPeriodEnd) {
           setNextBillingDate(new Date(d.stripe.currentPeriodEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
+        } else {
+          setNextBillingDate('—')
         }
         if (d.usage) {
-          setPhoneUsage(`${d.usage.virtualPhones ?? 0} of ${d.limits?.virtualPhones ?? '∞'} used`)
-          setAliasUsage(`${d.usage.emailAliases ?? 0} of ${d.limits?.emailAliases === 999 ? 'unlimited' : (d.limits?.emailAliases ?? '∞')} used`)
+          const phones = d.limits?.virtualPhones
+          const aliases = d.limits?.emailAliases
+          setPhoneUsage(`${d.usage.virtualPhones ?? 0} of ${phones === -1 ? 'unlimited' : (phones ?? 0)} used`)
+          setAliasUsage(`${d.usage.emailAliases ?? 0} of ${aliases === -1 ? 'unlimited' : (aliases ?? 0)} used`)
         }
       })
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    // Detect post-checkout redirect params
+    const params = new URLSearchParams(window.location.search)
+    const success = params.get('success')
+    const canceled = params.get('canceled')
+    const plan = params.get('plan')
+    const tab = params.get('tab')
+
+    if (success === 'true') {
+      setCheckoutSuccess(plan ?? 'your plan')
+      // Sync subscription from Stripe then refresh display
+      fetch('/api/subscription/sync', { method: 'POST' })
+        .finally(() => loadSubscription())
+      // Clean URL without reload
+      const clean = `${window.location.pathname}${tab ? `?tab=${tab}` : ''}`
+      window.history.replaceState({}, '', clean)
+    } else if (canceled === 'true') {
+      setCheckoutCanceled(true)
+      const clean = `${window.location.pathname}${tab ? `?tab=${tab}` : ''}`
+      window.history.replaceState({}, '', clean)
+    }
+
+    loadSubscription()
   }, [])
 
   // Profile state
@@ -415,6 +446,31 @@ export default function SettingsPage() {
         {/* ── PLAN & BILLING ──────────────────────────────────────────────────── */}
         <TabsContent value="subscription" className="mt-6 space-y-6">
 
+          {/* Post-checkout banners */}
+          {checkoutSuccess && (
+            <div className="flex items-start gap-3 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3">
+              <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-green-300 font-medium">Subscription activated!</p>
+                <p className="text-green-400/80 text-sm mt-0.5">
+                  Your <span className="capitalize">{checkoutSuccess}</span> plan is now active. Your 14-day trial has started.
+                </p>
+              </div>
+              <button onClick={() => setCheckoutSuccess(null)} className="ml-auto text-green-500/60 hover:text-green-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {checkoutCanceled && (
+            <div className="flex items-start gap-3 bg-zinc-700/40 border border-white/10 rounded-xl px-4 py-3">
+              <AlertTriangle className="w-5 h-5 text-zinc-400 mt-0.5 flex-shrink-0" />
+              <p className="text-zinc-300 text-sm">Checkout was canceled. Your plan was not changed.</p>
+              <button onClick={() => setCheckoutCanceled(false)} className="ml-auto text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Current plan */}
           <Card className="bg-white/5 border-white/10">
             <CardHeader>
@@ -427,8 +483,10 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-white">$9.99</span>
-                <span className="text-zinc-400 text-sm">/ month</span>
+                <span className="text-3xl font-bold text-white">
+                  {planName === 'Starter' ? '$4.99' : planName === 'Pro' ? '$9.99' : planName === 'Ultimate' ? '$19.99' : planPrice || '—'}
+                </span>
+                {planName !== 'Free' && <span className="text-zinc-400 text-sm">/ month</span>}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
