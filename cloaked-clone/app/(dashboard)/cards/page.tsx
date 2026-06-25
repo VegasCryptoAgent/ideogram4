@@ -700,11 +700,11 @@ export default function CardsPage() {
     lastFour: c.lastFour,
     status: (c.frozen ? 'frozen' : 'active') as VirtualCard['status'],
     limit: c.spendLimit ? c.spendLimit / 100 : 0,
-    spent: 0,
+    spent: c.spent ?? 0,
     merchant: c.hostname ?? null,
-    transactions: [],
+    transactions: Array.isArray(c.transactions) ? c.transactions : [],
     color: c.color ?? 'blue',
-    createdAt: new Date().toISOString().split('T')[0],
+    createdAt: c.createdAt ? new Date(c.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
   });
 
   const fetchCards = useCallback(async () => {

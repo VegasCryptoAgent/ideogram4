@@ -78,6 +78,7 @@ export async function GET() {
         const spent = txs.filter((t) => t.status === 'APPROVED' || t.status === 'SETTLING' || t.status === 'SETTLED').reduce((s, t) => s + t.amount, 0)
         return {
           ...formatCard(r.value, db.color),
+          createdAt: db.createdAt.toISOString(),
           spent: spent / 100,
           transactions: txs.slice(0, 20).map((t) => ({
             id: t.id,
