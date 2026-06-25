@@ -42,10 +42,20 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     // Check for a pending/running scan
     const activeScan = await prisma.scanJob.findFirst({
       where: { userId: session.id, status: { in: ['pending', 'running'] } },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (activeScan) {
-      return errorResponse('A scan is already in progress. Please wait for it to complete.', 409);
+      // Auto-clear jobs that have been stuck for more than 15 minutes
+      const staleMs = 15 * 60 * 1000;
+      const isStale = Date.now() - activeScan.createdAt.getTime() > staleMs;
+      if (!isStale) {
+        return errorResponse('A scan is already in progress. Please wait for it to complete.', 409);
+      }
+      await prisma.scanJob.update({
+        where: { id: activeScan.id },
+        data: { status: 'failed', completedAt: new Date() },
+      });
     }
 
     // Create scan job

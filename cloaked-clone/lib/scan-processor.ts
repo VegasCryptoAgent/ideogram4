@@ -144,17 +144,48 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
       state: primaryAddress?.state ?? 'US',
     };
 
-    const brokers = await prisma.dataBroker.findMany({
+    let brokers = await prisma.dataBroker.findMany({
       where: { isActive: true },
       orderBy: { priority: 'asc' },
     });
+
+    if (brokers.length === 0) {
+      console.warn('[Scanner] DataBroker table empty — auto-seeding from bundled list...');
+      const { BROKERS } = await import('../data/brokers');
+      for (const b of BROKERS) {
+        try {
+          const exists = await prisma.dataBroker.findFirst({ where: { website: b.website }, select: { id: true } });
+          if (!exists) {
+            await prisma.dataBroker.create({
+              data: {
+                name: b.name,
+                website: b.website,
+                category: b.category as string,
+                optOutMethod: b.optOutMethod as string,
+                optOutUrl: b.optOutUrl ?? null,
+                optOutEmail: b.optOutEmail ?? null,
+                scanUrlTemplate: b.scanUrlTemplate ?? null,
+                difficulty: b.difficulty as string,
+                avgRemovalDays: b.avgRemovalDays,
+                priority: b.priority,
+                isActive: true,
+              },
+            });
+          }
+        } catch (seedErr) {
+          console.error('[Scanner] Auto-seed failed for', b.name, seedErr);
+        }
+      }
+      brokers = await prisma.dataBroker.findMany({ where: { isActive: true }, orderBy: { priority: 'asc' } });
+      console.log(`[Scanner] Auto-seeded ${brokers.length} brokers`);
+    }
 
     if (brokers.length === 0) {
       await prisma.scanJob.update({
         where: { id: scanJobId },
         data: { status: 'completed', completedAt: new Date() },
       });
-      console.warn('[Scanner] No active brokers found — scan complete with 0 results');
+      console.warn('[Scanner] No active brokers after seeding — scan complete with 0 results');
       return;
     }
 
