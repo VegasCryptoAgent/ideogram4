@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield,
@@ -246,28 +246,49 @@ function Step1({
 function Step2({ onNext }: { onNext: () => void }) {
   const [progress, setProgress] = useState(0)
   const [scanned, setScanned] = useState(0)
+  const [total, setTotal] = useState(TOTAL_BROKERS)
   const [currentBroker, setCurrentBroker] = useState(BROKERS[0])
   const [brokerIdx, setBrokerIdx] = useState(0)
   const [done, setDone] = useState(false)
-  const [foundCount] = useState(Math.floor(Math.random() * 12) + 8)
-  const progressRef = useRef(0)
+  const [foundCount, setFoundCount] = useState(0)
 
+  // Poll real scan status from the server
   useEffect(() => {
-    // Advance progress over ~8 seconds
-    const interval = setInterval(() => {
-      progressRef.current = Math.min(progressRef.current + 100 / 80, 100)
-      setProgress(Math.round(progressRef.current))
-      setScanned(Math.round((progressRef.current / 100) * TOTAL_BROKERS))
-      if (progressRef.current >= 100) {
-        clearInterval(interval)
-        setDone(true)
-      }
-    }, 100)
+    let stopped = false
 
-    return () => clearInterval(interval)
+    async function poll() {
+      try {
+        const res = await fetch('/api/scan/status')
+        if (!res.ok || stopped) return
+        const json = await res.json() as { data: { status: string; progressPercent: number; scanned: number; total: number; found: number } | null }
+        const data = json.data
+        if (!data || stopped) return
+
+        setFoundCount(data.found ?? 0)
+        setScanned(data.scanned ?? 0)
+        if ((data.total ?? 0) > 0) setTotal(data.total)
+
+        if (data.status === 'completed' || data.status === 'failed') {
+          setProgress(100)
+          setScanned(data.total || TOTAL_BROKERS)
+          setDone(true)
+          return
+        }
+        setProgress(data.progressPercent ?? 0)
+      } catch {
+        // Network error — keep polling
+      }
+    }
+
+    void poll()
+    const intervalId = setInterval(poll, 2000)
+    return () => {
+      stopped = true
+      clearInterval(intervalId)
+    }
   }, [])
 
-  // Cycle through broker names
+  // Visual: cycle through broker names while scan runs
   useEffect(() => {
     if (done) return
     const interval = setInterval(() => {
@@ -280,7 +301,7 @@ function Step2({ onNext }: { onNext: () => void }) {
     return () => clearInterval(interval)
   }, [done])
 
-  // Auto-advance after scan completes (1.5s delay)
+  // Auto-advance 2 s after scan completes
   useEffect(() => {
     if (!done) return
     const t = setTimeout(onNext, 2000)
@@ -310,7 +331,7 @@ function Step2({ onNext }: { onNext: () => void }) {
         </h2>
         <p className="text-white/50 text-sm">
           {done
-            ? `We checked ${TOTAL_BROKERS} data broker sites.`
+            ? `We checked ${total} data broker sites.`
             : 'Searching data broker databases for your information…'}
         </p>
       </div>
@@ -330,7 +351,7 @@ function Step2({ onNext }: { onNext: () => void }) {
         </div>
         <Progress value={progress} className="h-2 bg-white/5 [&>div]:bg-gradient-to-r [&>div]:from-violet-600 [&>div]:to-purple-500" />
         <div className="flex items-center justify-between text-xs text-white/30">
-          <span>Scanned: {scanned} / {TOTAL_BROKERS}</span>
+          <span>Scanned: {scanned} / {total}</span>
           {!done && (
             <span className="flex items-center gap-1">
               <motion.span
@@ -423,30 +444,58 @@ function Step3({ onNext }: { onNext: () => void }) {
   const [areaCode, setAreaCode] = useState('')
   const [virtualNumber, setVirtualNumber] = useState<string | null>(null)
   const [numLoading, setNumLoading] = useState(false)
+  const [numError, setNumError] = useState<string | null>(null)
 
   const [aliasLabel, setAliasLabel] = useState('')
   const [emailAlias, setEmailAlias] = useState<string | null>(null)
   const [aliasLoading, setAliasLoading] = useState(false)
+  const [aliasError, setAliasError] = useState<string | null>(null)
 
-  function handleGetNumber() {
+  async function handleGetNumber() {
     setNumLoading(true)
-    const ac = areaCode.replace(/\D/g, '').slice(0, 3) || '555'
-    setTimeout(() => {
-      const n1 = Math.floor(Math.random() * 900) + 100
-      const n2 = Math.floor(Math.random() * 9000) + 1000
-      setVirtualNumber(`+1 (${ac}) ${n1}-${n2}`)
+    setNumError(null)
+    const stripped = areaCode.replace(/\D/g, '').slice(0, 3)
+    const ac = stripped.length === 3 ? stripped : stripped.length > 0 ? stripped.padEnd(3, '0') : '415'
+    try {
+      const res = await fetch('/api/phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ areaCode: ac }),
+      })
+      const json = await res.json() as { data?: { number?: string }; error?: string }
+      if (!res.ok) {
+        setNumError(json.error ?? 'Failed to create phone number')
+      } else {
+        setVirtualNumber(json.data?.number ?? 'Number created')
+      }
+    } catch {
+      setNumError('Network error — please try again')
+    } finally {
       setNumLoading(false)
-    }, 1000)
+    }
   }
 
-  function handleCreateAlias() {
+  async function handleCreateAlias() {
     setAliasLoading(true)
-    const label = aliasLabel.trim().toLowerCase().replace(/\s+/g, '') || 'me'
-    const hash = Math.random().toString(36).slice(2, 8)
-    setTimeout(() => {
-      setEmailAlias(`${label}+${hash}@shield.app`)
+    setAliasError(null)
+    const label = aliasLabel.trim() || 'me'
+    try {
+      const res = await fetch('/api/email-aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      })
+      const json = await res.json() as { data?: { alias?: string }; error?: string }
+      if (!res.ok) {
+        setAliasError(json.error ?? 'Failed to create email alias')
+      } else {
+        setEmailAlias(json.data?.alias ?? 'Alias created')
+      }
+    } catch {
+      setAliasError('Network error — please try again')
+    } finally {
       setAliasLoading(false)
-    }, 900)
+    }
   }
 
   return (
@@ -496,8 +545,11 @@ function Step3({ onNext }: { onNext: () => void }) {
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-violet-500/50 font-mono"
                 />
               </div>
+              {numError && (
+                <p className="text-red-400 text-xs">{numError}</p>
+              )}
               <Button
-                onClick={handleGetNumber}
+                onClick={() => { void handleGetNumber() }}
                 disabled={numLoading}
                 className="w-full bg-violet-600 hover:bg-violet-500 text-white text-sm h-9 disabled:opacity-60"
               >
@@ -544,8 +596,11 @@ function Step3({ onNext }: { onNext: () => void }) {
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-violet-500/50"
                 />
               </div>
+              {aliasError && (
+                <p className="text-red-400 text-xs">{aliasError}</p>
+              )}
               <Button
-                onClick={handleCreateAlias}
+                onClick={() => { void handleCreateAlias() }}
                 disabled={aliasLoading}
                 className="w-full bg-purple-700 hover:bg-purple-600 text-white text-sm h-9 disabled:opacity-60"
               >
