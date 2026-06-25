@@ -153,7 +153,7 @@ function CreditCardVisual({
           <div>
             <div className="text-white/40" style={{ fontSize: isLarge ? 9 : 8 }}>VALID THRU</div>
             <div className={`font-mono text-white font-semibold ${isLarge ? "text-sm" : "text-xs"}`}>
-              06/28
+              ••/••
             </div>
           </div>
         </div>
@@ -185,9 +185,6 @@ function CardDetailModal({
   onToggleFreeze: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const [revealNumber, setRevealNumber] = useState(false);
-  const [revealCVV, setRevealCVV] = useState(false);
-
   const handleDelete = () => {
     if (window.confirm(`Delete card "${card.nickname}"? This cannot be undone.`)) {
       onDelete(card.id);
@@ -195,9 +192,7 @@ function CardDetailModal({
     }
   };
 
-  const fullNumber = revealNumber
-    ? `4532 8821 6644 ${card.lastFour}`
-    : `•••• •••• •••• ${card.lastFour}`;
+  const maskedNumber = `•••• •••• •••• ${card.lastFour}`;
 
   return (
     <motion.div
@@ -239,50 +234,20 @@ function CardDetailModal({
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-zinc-500 mb-0.5">Card Number</div>
-                <div className="font-mono text-sm text-white">{fullNumber}</div>
-              </div>
-              <button
-                onClick={() => setRevealNumber((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
-              >
-                {revealNumber ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                {revealNumber ? "Hide" : "Reveal"}
-              </button>
-            </div>
-
-            <div className="h-px bg-white/5" />
-
-            {/* CVV */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-zinc-500 mb-0.5">CVV</div>
-                <div className="font-mono text-sm text-white">{revealCVV ? "428" : "•••"}</div>
-              </div>
-              <button
-                onClick={() => setRevealCVV((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
-              >
-                {revealCVV ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                {revealCVV ? "Hide" : "Reveal"}
-              </button>
-            </div>
-
-            <div className="h-px bg-white/5" />
-
-            {/* Expiry */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-zinc-500 mb-0.5">Expiry</div>
-                <div className="font-mono text-sm text-white">06/28</div>
+                <div className="font-mono text-sm text-white">{maskedNumber}</div>
               </div>
             </div>
 
             <div className="h-px bg-white/5" />
 
-            {/* Billing */}
-            <div>
-              <div className="text-xs text-zinc-500 mb-0.5">Billing Address</div>
-              <div className="text-sm text-white">Shield Virtual, 100 Privacy Lane</div>
+            {/* Security note — Privacy.com only exposes full PAN/CVV at creation */}
+            <div className="flex items-start gap-2 text-xs text-zinc-400 leading-relaxed">
+              <Lock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-zinc-500" />
+              <span>
+                For your security, the full card number, CVV, and expiry are shown only once when the
+                card is created. Use this card in your browser extension or autofill, or create a new
+                card if you need the full details again.
+              </span>
             </div>
           </div>
 

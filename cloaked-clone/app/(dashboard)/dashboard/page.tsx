@@ -74,17 +74,6 @@ interface ScanStatus {
   createdAt: string;
 }
 
-// ─── Fallback static chart data ───────────────────────────────────────────────
-
-const REMOVAL_DATA = [
-  { month: "Aug", found: 12, removed: 8  },
-  { month: "Sep", found: 18, removed: 15 },
-  { month: "Oct", found: 22, removed: 19 },
-  { month: "Nov", found: 15, removed: 14 },
-  { month: "Dec", found: 10, removed: 10 },
-  { month: "Jan", found: 7,  removed: 6  },
-];
-
 const QUICK_ACTIONS = [
   { icon: Scan,  label: "Run Scan Now",       description: "Scan 400+ brokers",  href: "/scanner" },
   { icon: Phone, label: "Add Virtual Number", description: "Get a masked phone",  href: "/phone"   },
@@ -119,13 +108,14 @@ export default function DashboardPage() {
 
   // Real data state
   const [brokerStats, setBrokerStats]     = useState<BrokerStats | null>(null);
-  const [privacyScore, setPrivacyScore]   = useState<number>(72);
+  const [privacyScore, setPrivacyScore]   = useState<number>(0);
   const [breaches, setBreaches]           = useState<BreachAlert[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [aliases, setAliases]             = useState<EmailAlias[]>([]);
   const [phones, setPhones]               = useState<VirtualPhone[]>([]);
   const [lastScan, setLastScan]           = useState<ScanStatus | null>(null);
-  const [planName, setPlanName]           = useState("Pro");
+  const [planName, setPlanName]           = useState("Free");
+  const [removalData, setRemovalData]     = useState<{ month: string; found: number; removed: number }[]>([]);
 
   useEffect(() => {
     async function loadAll() {
@@ -138,6 +128,7 @@ export default function DashboardPage() {
         fetch("/api/phone").then((r) => r.json()),
         fetch("/api/scan").then((r) => r.json()),
         fetch("/api/subscription").then((r) => r.json()),
+        fetch("/api/scan/history?limit=6").then((r) => r.json()),
       ]);
 
       // Broker stats
@@ -162,7 +153,8 @@ export default function DashboardPage() {
       // Notifications → recent activity
       if (results[3].status === "fulfilled") {
         const d = results[3].value?.data;
-        if (Array.isArray(d)) setNotifications(d.slice(0, 5));
+        const arr = Array.isArray(d) ? d : (d?.items ?? []);
+        if (Array.isArray(arr)) setNotifications(arr.slice(0, 5));
       }
 
       // Email aliases
@@ -190,6 +182,21 @@ export default function DashboardPage() {
         if (d?.planName) setPlanName(d.planName);
       }
 
+      // Removal trend chart — built from real scan history
+      if (results[8].status === "fulfilled") {
+        const items = results[8].value?.data?.items ?? [];
+        if (Array.isArray(items) && items.length > 0) {
+          const points = [...items]
+            .reverse()
+            .map((job: { createdAt: string; found: number; removed: number }) => ({
+              month: new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+              found: job.found ?? 0,
+              removed: job.removed ?? 0,
+            }));
+          setRemovalData(points);
+        }
+      }
+
       setLoading(false);
     }
 
@@ -197,9 +204,9 @@ export default function DashboardPage() {
   }, []);
 
   // Derived values
-  const brokersFound   = brokerStats?.found ?? 47;
-  const inProgress     = brokerStats?.removal_requested ?? 8;
-  const removed        = brokerStats?.removed ?? 39;
+  const brokersFound   = brokerStats?.found ?? 0;
+  const inProgress     = brokerStats?.removal_requested ?? 0;
+  const removed        = brokerStats?.removed ?? 0;
   const activeBreaches = breaches.filter((b) => !b.isRead);
   const topBreach      = activeBreaches[0] ?? null;
 
@@ -443,25 +450,33 @@ export default function DashboardPage() {
             <h3 className="text-sm font-semibold text-[#1A1A14] flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-[#F97316]" /> Removal Progress
             </h3>
-            <span className="text-xs bg-[#E8E3D9] text-[#1A1A14]/50 px-2.5 py-1 rounded-full">Last 6 months</span>
+            <span className="text-xs bg-[#E8E3D9] text-[#1A1A14]/50 px-2.5 py-1 rounded-full">Recent scans</span>
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={REMOVAL_DATA} barSize={10} barGap={3}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E0D5" />
-              <XAxis dataKey="month" tick={{ fill: "#1A1A1440", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#1A1A1440", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{ background: "#fff", border: "1px solid #E5E0D5", borderRadius: 12, color: "#1A1A14", fontSize: 12 }}
-                cursor={{ fill: "rgba(0,0,0,0.03)" }}
-              />
-              <Bar dataKey="found"   fill="#FCA5A5" radius={[4, 4, 0, 0]} name="Found"   />
-              <Bar dataKey="removed" fill="#F97316" radius={[4, 4, 0, 0]} name="Removed" />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-3">
-            <div className="flex items-center gap-1.5 text-xs text-[#1A1A14]/40"><div className="w-3 h-3 rounded bg-red-200" /> Found</div>
-            <div className="flex items-center gap-1.5 text-xs text-[#1A1A14]/40"><div className="w-3 h-3 rounded bg-[#F97316]" /> Removed</div>
-          </div>
+          {removalData.length === 0 ? (
+            <div className="flex items-center justify-center h-[180px] text-sm text-[#1A1A14]/40 text-center px-4">
+              Run a scan to start tracking found vs. removed listings over time.
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={removalData} barSize={10} barGap={3}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E0D5" />
+                  <XAxis dataKey="month" tick={{ fill: "#1A1A1440", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#1A1A1440", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: "#fff", border: "1px solid #E5E0D5", borderRadius: 12, color: "#1A1A14", fontSize: 12 }}
+                    cursor={{ fill: "rgba(0,0,0,0.03)" }}
+                  />
+                  <Bar dataKey="found"   fill="#FCA5A5" radius={[4, 4, 0, 0]} name="Found"   />
+                  <Bar dataKey="removed" fill="#F97316" radius={[4, 4, 0, 0]} name="Removed" />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex gap-4 mt-3">
+                <div className="flex items-center gap-1.5 text-xs text-[#1A1A14]/40"><div className="w-3 h-3 rounded bg-red-200" /> Found</div>
+                <div className="flex items-center gap-1.5 text-xs text-[#1A1A14]/40"><div className="w-3 h-3 rounded bg-[#F97316]" /> Removed</div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Quick Actions */}

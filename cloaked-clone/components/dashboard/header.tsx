@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, ChevronDown, LogOut, Settings, User, CreditCard } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -23,12 +23,26 @@ interface Notification {
   type: "removal" | "breach" | "scan" | "alert";
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: "1", title: "Data Removed", message: "Your data was removed from Spokeo.com", time: "2 min ago", read: false, type: "removal" },
-  { id: "2", title: "Breach Alert", message: "Your email appeared in a LinkedIn breach", time: "1 hour ago", read: false, type: "breach" },
-  { id: "3", title: "Weekly Scan Complete", message: "Found 3 new listings. Removal started.", time: "6 hours ago", read: false, type: "scan" },
-  { id: "4", title: "Data Removed", message: "Your data was removed from BeenVerified", time: "Yesterday", read: true, type: "removal" },
-];
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+// Map API notification types to header display types
+function mapNotifType(type: string): Notification["type"] {
+  if (type.includes("removed") || type.includes("removal")) return "removal";
+  if (type.includes("breach")) return "breach";
+  if (type.includes("scan")) return "scan";
+  return "alert";
+}
 
 const typeIcon: Record<string, string> = { removal: "✓", breach: "!", scan: "↻", alert: "⚠" };
 const typeBg: Record<string, string> = {
@@ -44,11 +58,50 @@ interface HeaderProps {
 
 export default function Header({ title = "Dashboard" }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [userName, setUserName] = useState("");
+  const [userPlan, setUserPlan] = useState("Free");
+
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then((r) => r.json())
+      .then((json) => {
+        const raw: { id: string; type: string; title: string; message: string; isRead: boolean; createdAt: string }[] =
+          json.data?.items ?? json.data ?? [];
+        setNotifications(
+          raw.map((n) => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            time: timeAgo(n.createdAt),
+            read: n.isRead,
+            type: mapNotifType(n.type),
+          }))
+        );
+      })
+      .catch(() => {});
+
+    fetch("/api/user/profile")
+      .then((r) => r.json())
+      .then((json) => {
+        const d = json.data ?? json;
+        const name = d.name || [d.firstName, d.lastName].filter(Boolean).join(" ") || d.email || "";
+        if (name) setUserName(name);
+        if (d.planId) setUserPlan(d.planId.charAt(0).toUpperCase() + d.planId.slice(1) + " Plan");
+      })
+      .catch(() => {});
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const initials = userName
+    ? userName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
+    : "—";
+
+  const markAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    fetch("/api/notifications", { method: "POST" }).catch(() => {});
+  };
 
   return (
     <header className="h-16 border-b border-white/10 bg-[#141410] flex items-center justify-between px-6 flex-shrink-0">
@@ -80,6 +133,9 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
                 )}
               </div>
               <div className="max-h-72 overflow-y-auto">
+                {notifications.length === 0 && (
+                  <div className="px-4 py-8 text-center text-sm text-white/40">No notifications yet</div>
+                )}
                 {notifications.map((notif) => (
                   <div
                     key={notif.id}
@@ -111,11 +167,11 @@ export default function Header({ title = "Dashboard" }: HeaderProps) {
             <button className="flex items-center gap-2.5 hover:bg-white/8 rounded-xl px-2.5 py-1.5 transition-colors">
               <Avatar className="h-7 w-7">
                 <AvatarImage src="" alt="User" />
-                <AvatarFallback className="bg-violet-600 text-white text-xs">JD</AvatarFallback>
+                <AvatarFallback className="bg-violet-600 text-white text-xs">{initials}</AvatarFallback>
               </Avatar>
               <div className="hidden sm:block text-left">
-                <div className="text-sm font-medium text-white">Jane Doe</div>
-                <div className="text-xs text-white/40">Pro Plan</div>
+                <div className="text-sm font-medium text-white">{userName || "Loading…"}</div>
+                <div className="text-xs text-white/40">{userPlan}</div>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-white/30 hidden sm:block" />
             </button>

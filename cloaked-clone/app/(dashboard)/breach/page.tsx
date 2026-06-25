@@ -42,78 +42,39 @@ interface MonitoredType {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MONITORED_TYPES: MonitoredType[] = [
-  { type: 'Email Address',       icon: '📧', status: 'monitored', exposures: 3 },
-  { type: 'Password Hash',       icon: '🔐', status: 'exposed',   exposures: 2 },
-  { type: 'Social Security No.', icon: '🪪', status: 'alert',     exposures: 1 },
-  { type: 'Phone Number',        icon: '📱', status: 'monitored', exposures: 1 },
-  { type: 'Home Address',        icon: '🏠', status: 'monitored', exposures: 0 },
-  { type: 'Date of Birth',       icon: '📅', status: 'monitored', exposures: 0 },
-  { type: "Driver's License",    icon: '🚗', status: 'monitored', exposures: 0 },
-  { type: 'Passport Number',     icon: '✈️',  status: 'monitored', exposures: 0 },
-  { type: 'Credit Card BIN',     icon: '💳', status: 'monitored', exposures: 0 },
-  { type: 'Bank Account',        icon: '🏦', status: 'monitored', exposures: 0 },
-  { type: 'Crypto Wallet',       icon: '₿',  status: 'monitored', exposures: 0 },
-  { type: 'Medical Record ID',   icon: '🏥', status: 'monitored', exposures: 0 },
-  { type: 'Username',            icon: '👤', status: 'exposed',   exposures: 4 },
-  { type: 'IP Address',          icon: '🌐', status: 'monitored', exposures: 0 },
-  { type: 'Security Questions',  icon: '❓', status: 'monitored', exposures: 0 },
+// Data types we monitor, with keywords used to match against breach.dataExposed.
+// Exposure counts are computed live from the user's real breaches.
+const MONITORED_TYPE_DEFS: { type: string; icon: string; keywords: string[] }[] = [
+  { type: 'Email Address',       icon: '📧', keywords: ['email'] },
+  { type: 'Password Hash',       icon: '🔐', keywords: ['password'] },
+  { type: 'Social Security No.', icon: '🪪', keywords: ['ssn', 'social security'] },
+  { type: 'Phone Number',        icon: '📱', keywords: ['phone'] },
+  { type: 'Home Address',        icon: '🏠', keywords: ['address'] },
+  { type: 'Date of Birth',       icon: '📅', keywords: ['birth', 'dob'] },
+  { type: "Driver's License",    icon: '🚗', keywords: ['license', 'licence'] },
+  { type: 'Passport Number',     icon: '✈️',  keywords: ['passport'] },
+  { type: 'Credit Card BIN',     icon: '💳', keywords: ['credit card', 'card'] },
+  { type: 'Bank Account',        icon: '🏦', keywords: ['bank', 'account number'] },
+  { type: 'Crypto Wallet',       icon: '₿',  keywords: ['crypto', 'wallet'] },
+  { type: 'Medical Record ID',   icon: '🏥', keywords: ['medical', 'health'] },
+  { type: 'Username',            icon: '👤', keywords: ['username', 'user name'] },
+  { type: 'IP Address',          icon: '🌐', keywords: ['ip address', 'ip'] },
+  { type: 'Security Questions',  icon: '❓', keywords: ['security question'] },
 ]
 
-const MOCK_BREACHES: Breach[] = [
-  {
-    id: '1',
-    name: 'DataBrokerHub',
-    domain: 'databrokerhub.com',
-    breachDate: '2024-08-15',
-    addedDate: '2024-09-01',
-    dataExposed: ['Email', 'Password Hash', 'Phone', 'Name', 'Address'],
-    severity: 'critical',
-    description:
-      'DataBrokerHub suffered a major breach exposing the full database of 340 million records including hashed passwords, email addresses, and physical addresses.',
-    isRead: false,
-    recordCount: 340000000,
-  },
-  {
-    id: '2',
-    name: 'ShopEasy',
-    domain: 'shopeasy.com',
-    breachDate: '2024-03-22',
-    addedDate: '2024-04-10',
-    dataExposed: ['Email', 'Name', 'Purchase History'],
-    severity: 'medium',
-    description:
-      'Online retailer ShopEasy had customer order data exposed due to a misconfigured S3 bucket. No passwords were included.',
-    isRead: true,
-    recordCount: 4200000,
-  },
-  {
-    id: '3',
-    name: 'SocialConnect',
-    domain: 'socialconnect.io',
-    breachDate: '2023-11-05',
-    addedDate: '2023-12-01',
-    dataExposed: ['Email', 'Username', 'IP Address', 'Bio'],
-    severity: 'low',
-    description:
-      'Social platform SocialConnect leaked user profile data including email addresses and bios via a public API endpoint.',
-    isRead: true,
-    recordCount: 890000,
-  },
-  {
-    id: '4',
-    name: 'NationalCredit360',
-    domain: 'nationalcredit360.com',
-    breachDate: '2025-01-11',
-    addedDate: '2025-02-03',
-    dataExposed: ['SSN', 'Name', 'Date of Birth', 'Address', 'Credit Card', 'Email'],
-    severity: 'critical',
-    description:
-      'NationalCredit360 suffered a catastrophic breach exposing the full PII of 92 million US consumers including Social Security Numbers, full names, dates of birth, home addresses, and partial credit card data. This breach is classified as CRITICAL — immediate action required.',
-    isRead: false,
-    recordCount: 92000000,
-  },
-]
+function computeMonitoredTypes(breaches: Breach[]): MonitoredType[] {
+  return MONITORED_TYPE_DEFS.map((def) => {
+    const exposures = breaches.filter((b) =>
+      b.dataExposed.some((d) =>
+        def.keywords.some((kw) => d.toLowerCase().includes(kw))
+      )
+    ).length
+    const isCritical = def.keywords.some((kw) => ['ssn', 'social security'].includes(kw)) && exposures > 0
+    const status: MonitoredType['status'] =
+      exposures === 0 ? 'monitored' : isCritical ? 'alert' : 'exposed'
+    return { type: def.type, icon: def.icon, status, exposures }
+  })
+}
 
 const severityConfig = {
   critical: { label: 'Critical', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
@@ -454,6 +415,8 @@ export default function BreachPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
 
+  const monitoredTypes = computeMonitoredTypes(breaches)
+
   const fetchBreaches = useCallback(async () => {
     try {
       const res = await fetch('/api/breach')
@@ -558,7 +521,7 @@ export default function BreachPage() {
           <span className="text-xs text-zinc-500">15 data types across the dark web</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {MONITORED_TYPES.map((item) => {
+          {monitoredTypes.map((item) => {
             const isAlert = item.status === 'alert'
             const isExposed = item.exposures > 0 && !isAlert
             const baseCls =

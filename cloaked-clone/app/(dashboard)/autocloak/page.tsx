@@ -112,18 +112,28 @@ const SITES_DATA: SiteEntry[] = [
   { id: "calm", name: "Calm", category: "OTHER", enabled: false },
 ]
 
-const ACTIVITY_LOG = [
-  { id: "1", site: "Amazon.com", alias: "amzn-x7k2@shield.app", created: "2 days ago", emailsBlocked: 3, active: true },
-  { id: "2", site: "Netflix.com", alias: "nflx-p9m4@shield.app", created: "5 days ago", emailsBlocked: 1, active: true },
-  { id: "3", site: "LinkedIn.com", alias: "lkdn-r3q8@shield.app", created: "1 week ago", emailsBlocked: 7, active: true },
-  { id: "4", site: "Spotify.com", alias: "spty-k2j5@shield.app", created: "1 week ago", emailsBlocked: 2, active: true },
-  { id: "5", site: "NYTimes.com", alias: "nyts-w6n1@shield.app", created: "2 weeks ago", emailsBlocked: 14, active: true },
-  { id: "6", site: "Airbnb.com", alias: "arbn-d4h7@shield.app", created: "3 weeks ago", emailsBlocked: 0, active: true },
-  { id: "7", site: "Etsy.com", alias: "etsy-f8b2@shield.app", created: "1 month ago", emailsBlocked: 5, active: false },
-  { id: "8", site: "Reddit.com", alias: "rddt-v5c9@shield.app", created: "1 month ago", emailsBlocked: 22, active: true },
-  { id: "9", site: "GitHub.com", alias: "ghub-t1m6@shield.app", created: "2 months ago", emailsBlocked: 0, active: true },
-  { id: "10", site: "Notion.com", alias: "ntn-q3k8@shield.app", created: "2 months ago", emailsBlocked: 1, active: true },
-]
+interface ActivityEntry {
+  id: string
+  site: string
+  alias: string
+  created: string
+  emailsBlocked: number
+  active: boolean
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diff = Date.now() - then
+  const day = 24 * 60 * 60 * 1000
+  if (diff < day) return "today"
+  const days = Math.floor(diff / day)
+  if (days === 1) return "1 day ago"
+  if (days < 7) return `${days} days ago`
+  if (days < 14) return "1 week ago"
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`
+  if (days < 60) return "1 month ago"
+  return `${Math.floor(days / 30)} months ago`
+}
 
 const CATEGORY_ORDER = [
   "SHOPPING",
@@ -153,7 +163,7 @@ export default function AutoCloakPage() {
   const [extensionInstalled, setExtensionInstalled] = useState(false)
   const [sites, setSites] = useState<SiteEntry[]>(SITES_DATA)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activityLog, setActivityLog] = useState(ACTIVITY_LOG)
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([])
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Load user's saved autocloak preferences
@@ -169,6 +179,27 @@ export default function AutoCloakPage() {
             enabled: savedMap[s.name] !== undefined ? savedMap[s.name] : s.enabled
           })))
         }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Load real activity from the user's email aliases (AutoCloak-created aliases)
+  useEffect(() => {
+    fetch('/api/email-aliases')
+      .then(r => r.json())
+      .then(json => {
+        const raw: {
+          id: string; alias: string; label?: string | null;
+          spamBlocked?: number; isActive?: boolean; createdAt: string
+        }[] = json.data?.items ?? json.data ?? json.items ?? []
+        setActivityLog(raw.map(a => ({
+          id: a.id,
+          site: a.label || a.alias.split('@')[0],
+          alias: a.alias,
+          created: relativeTime(a.createdAt),
+          emailsBlocked: a.spamBlocked ?? 0,
+          active: a.isActive ?? true,
+        })))
       })
       .catch(() => {})
   }, [])
@@ -208,6 +239,7 @@ export default function AutoCloakPage() {
 
   const deleteActivityEntry = (id: string) => {
     setActivityLog((prev) => prev.filter((entry) => entry.id !== id))
+    fetch(`/api/email-aliases/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   const copyAlias = async (alias: string, id: string) => {

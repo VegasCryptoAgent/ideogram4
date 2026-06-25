@@ -62,131 +62,6 @@ interface SharedVault {
   createdAt: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_PASSWORDS: PasswordEntry[] = [
-  {
-    id: "1",
-    site: "Google",
-    url: "google.com",
-    username: "jreeves@gmail.com",
-    password: "Xk9#mP2qLr",
-    strength: "strong",
-    hasTotp: true,
-    lastUpdated: "2 days ago",
-    tags: ["personal", "email"],
-    notes: "Primary Google account. Recovery email set to backup@gmail.com.",
-  },
-  {
-    id: "2",
-    site: "Amazon",
-    url: "amazon.com",
-    username: "jreeves@gmail.com",
-    password: "Tr4&nB8wQz",
-    strength: "strong",
-    hasTotp: false,
-    lastUpdated: "1 week ago",
-    tags: ["shopping"],
-    notes: "Prime membership active. Default card ending in 4821.",
-  },
-  {
-    id: "3",
-    site: "Netflix",
-    url: "netflix.com",
-    username: "jreeves@gmail.com",
-    password: "movie2024",
-    strength: "weak",
-    hasTotp: false,
-    lastUpdated: "3 months ago",
-    tags: ["streaming"],
-    breached: true,
-    notes: "Shared with family. Password needs urgent update.",
-  },
-  {
-    id: "4",
-    site: "Chase Bank",
-    url: "chase.com",
-    username: "jreeves@gmail.com",
-    password: "Vy7!kLp3Wm",
-    strength: "strong",
-    hasTotp: true,
-    lastUpdated: "5 days ago",
-    tags: ["banking", "finance"],
-    notes: "Online banking. Remember to update every 90 days.",
-  },
-  {
-    id: "5",
-    site: "GitHub",
-    url: "github.com",
-    username: "jreeves",
-    password: "Dev#2024!",
-    strength: "medium",
-    hasTotp: true,
-    lastUpdated: "2 weeks ago",
-    tags: ["work", "dev"],
-    sharedVault: "Work Vault",
-    notes: "Personal access tokens stored separately in vault.",
-  },
-  {
-    id: "6",
-    site: "Twitter/X",
-    url: "x.com",
-    username: "@jreeves",
-    password: "twitter123",
-    strength: "weak",
-    hasTotp: false,
-    lastUpdated: "4 months ago",
-    tags: ["social"],
-    breached: true,
-    notes: "Linked to phone number for recovery.",
-  },
-  {
-    id: "7",
-    site: "LinkedIn",
-    url: "linkedin.com",
-    username: "jreeves@gmail.com",
-    password: "Lk8@pWr2Yz",
-    strength: "strong",
-    hasTotp: false,
-    lastUpdated: "1 month ago",
-    tags: ["professional"],
-  },
-  {
-    id: "8",
-    site: "Dropbox",
-    url: "dropbox.com",
-    username: "jreeves@gmail.com",
-    password: "Drop#Secure1!",
-    strength: "strong",
-    hasTotp: false,
-    lastUpdated: "3 weeks ago",
-    tags: ["storage", "work"],
-    sharedVault: "Work Vault",
-    notes: "Business plan. 2TB storage.",
-  },
-];
-
-const MOCK_VAULTS: SharedVault[] = [
-  {
-    id: "1",
-    name: "Family Vault",
-    members: [
-      { name: "Jane Reeves", color: "bg-purple-500", initials: "JR" },
-      { name: "Mark Reeves", color: "bg-blue-500", initials: "MR" },
-      { name: "Mom", color: "bg-pink-500", initials: "MO" },
-    ],
-    itemCount: 12,
-    createdAt: "Jan 2026",
-  },
-  {
-    id: "2",
-    name: "Work Vault",
-    members: [{ name: "Team", color: "bg-green-500", initials: "TM" }],
-    itemCount: 5,
-    createdAt: "Mar 2026",
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SITE_COLORS: Record<string, string> = {
@@ -297,8 +172,31 @@ function TotpCell({ entryId }: { entryId: string }) {
 
 // ─── Password Health Score ────────────────────────────────────────────────────
 
-function PasswordHealthScore({ weakPasswords }: { weakPasswords: PasswordEntry[] }) {
-  const score = 78;
+function PasswordHealthScore({
+  passwords,
+  weakPasswords,
+  reusedCount,
+}: {
+  passwords: PasswordEntry[];
+  weakPasswords: PasswordEntry[];
+  reusedCount: number;
+}) {
+  const total = passwords.length;
+  const breachedCount = passwords.filter((p) => p.breached).length;
+  // Real score: start at 100, penalize weak/reused/breached entries
+  const score =
+    total === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.round(
+            100 -
+              (weakPasswords.length / total) * 40 -
+              (reusedCount / total) * 25 -
+              (breachedCount / total) * 25
+          )
+        );
+  const rating = score >= 90 ? "Excellent" : score >= 75 ? "Good" : score >= 50 ? "Fair" : "Poor";
   const radius = 52;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - score / 100);
@@ -333,7 +231,7 @@ function PasswordHealthScore({ weakPasswords }: { weakPasswords: PasswordEntry[]
                 /100
               </text>
             </svg>
-            <span className="text-sm font-semibold text-orange-400">Good</span>
+            <span className={`text-sm font-semibold ${score >= 75 ? "text-green-400" : score >= 50 ? "text-orange-400" : "text-red-400"}`}>{rating}</span>
           </div>
 
           {/* Issues */}
@@ -341,29 +239,25 @@ function PasswordHealthScore({ weakPasswords }: { weakPasswords: PasswordEntry[]
             <div className="flex items-center justify-between bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <span className="text-sm text-white">3 weak passwords</span>
+                <span className="text-sm text-white">{weakPasswords.length} weak password{weakPasswords.length !== 1 ? "s" : ""}</span>
               </div>
-              <button className="text-xs text-red-400 hover:text-red-300 font-medium underline underline-offset-2 transition-colors">
-                Update
-              </button>
             </div>
             <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-orange-400 flex-shrink-0" />
-                <span className="text-sm text-white">2 reused passwords</span>
+                <span className="text-sm text-white">{reusedCount} reused password{reusedCount !== 1 ? "s" : ""}</span>
               </div>
-              <button className="text-xs text-orange-400 hover:text-orange-300 font-medium underline underline-offset-2 transition-colors">
-                Fix
-              </button>
             </div>
             <p className="text-xs text-zinc-500 px-1">
-              3 weak · 2 reused — fix these to reach{" "}
-              <span className="text-green-400 font-medium">95+</span>
+              {total === 0
+                ? "Add passwords to see your health score."
+                : `${weakPasswords.length} weak · ${reusedCount} reused — fix these to improve your score.`}
             </p>
           </div>
         </div>
 
         {/* Weak passwords list */}
+        {weakPasswords.length > 0 && (
         <div>
           <div className="text-sm font-medium text-zinc-300 mb-2">Weak Passwords to Update</div>
           <div className="space-y-2">
@@ -394,6 +288,7 @@ function PasswordHealthScore({ weakPasswords }: { weakPasswords: PasswordEntry[]
             ))}
           </div>
         </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1161,6 +1056,13 @@ export default function PasswordsPage() {
 
   const weakPasswords = passwords.filter((p) => p.strength === "weak");
 
+  // Reused = passwords whose value appears more than once
+  const passwordCounts = passwords.reduce<Record<string, number>>((acc, p) => {
+    if (p.password) acc[p.password] = (acc[p.password] ?? 0) + 1;
+    return acc;
+  }, {});
+  const reusedCount = passwords.filter((p) => p.password && passwordCounts[p.password] > 1).length;
+
   function handleCopy(text: string, id: string) {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedId(id);
@@ -1192,7 +1094,6 @@ export default function PasswordsPage() {
 
   const totalCount = passwords.length;
   const weakCount = passwords.filter((p) => p.strength === "weak").length;
-  const reusedCount = 0;
   const totpCount = passwords.filter((p) => p.hasTotp).length;
 
   return (
@@ -1238,7 +1139,7 @@ export default function PasswordsPage() {
         {/* ── Tab 1: All Passwords ── */}
         <TabsContent value="vault" className="space-y-6">
           {/* Health Score */}
-          <PasswordHealthScore weakPasswords={weakPasswords} />
+          <PasswordHealthScore passwords={passwords} weakPasswords={weakPasswords} reusedCount={reusedCount} />
 
           {/* Search */}
           <div className="relative">

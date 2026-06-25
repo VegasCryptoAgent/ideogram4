@@ -101,41 +101,6 @@ function mapApiAlias(a: ApiEmailAlias): EmailAlias {
   };
 }
 
-// ─── Static mock identities (identities have no API yet) ─────────────────────
-
-const MOCK_IDENTITIES: Identity[] = [
-  {
-    id: "1",
-    name: "Shopping Identity",
-    emailAlias: "shield-jane@shield.app",
-    phoneAlias: "+1 (555) 234-5678",
-    avatarColor: "bg-blue-500",
-    totalEmails: 109,
-    spamRate: 26,
-    status: "active",
-  },
-  {
-    id: "2",
-    name: "Newsletter Identity",
-    emailAlias: "news-anon@shield.app",
-    phoneAlias: null,
-    avatarColor: "bg-purple-500",
-    totalEmails: 103,
-    spamRate: 30,
-    status: "active",
-  },
-  {
-    id: "3",
-    name: "Work Contacts",
-    emailAlias: "work-pro@shield.app",
-    phoneAlias: "+1 (555) 876-5432",
-    avatarColor: "bg-green-500",
-    totalEmails: 8,
-    spamRate: 0,
-    status: "active",
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function spamBarColor(rate: number): string {
@@ -177,7 +142,7 @@ export default function EmailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [identities, setIdentities] = useState<Identity[]>(MOCK_IDENTITIES);
+  const [identities, setIdentities] = useState<Identity[]>([]);
 
   // Create alias dialog
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -604,6 +569,12 @@ export default function EmailPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {identities.length === 0 && (
+          <div className="glass-card rounded-2xl p-8 border border-white/10 text-center text-white/40 text-sm">
+            No identities yet. Create one to group an email alias and virtual phone under a single persona.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {identities.map((identity) => (
