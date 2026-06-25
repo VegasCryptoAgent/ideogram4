@@ -183,25 +183,47 @@ function ProgressDots({ stage }: { stage: BrokerStage }) {
 
 // ─── Certificate Modal ────────────────────────────────────────────────────────
 
-function generateHash(): string {
-  const chars = "0123456789abcdef";
-  return Array.from({ length: 64 }, () => chars[Math.floor(Math.random() * 16)]).join("");
+// Real SHA-256 of the certificate's actual contents (deterministic, verifiable).
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function CertificateModal({
   broker,
+  userName,
   onClose,
 }: {
   broker: Broker;
+  userName: string;
   onClose: () => void;
 }) {
-  const certId = `CERT-${broker.id}-2026`;
-  const hash = useMemo(() => generateHash(), []);
+  const issuedTo = userName.trim() || "Account holder";
+  // Certificate ID and year are derived from the real confirmed-removal date.
+  const certYear = broker.dateRemoved ? new Date(broker.dateRemoved).getFullYear() : new Date().getFullYear();
+  const certId = `CERT-${broker.id}-${certYear}`;
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  // Compute a genuine SHA-256 of the canonical certificate payload so the
+  // displayed verification hash actually corresponds to this certificate.
+  const [hash, setHash] = useState<string | null>(null);
+  useEffect(() => {
+    const payload = [certId, issuedTo, broker.name, broker.url, broker.dateRemoved ?? ""].join("|");
+    let active = true;
+    sha256Hex(payload).then((h) => {
+      if (active) setHash(h);
+    });
+    return () => {
+      active = false;
+    };
+  }, [certId, issuedTo, broker.name, broker.url, broker.dateRemoved]);
 
   return (
     <motion.div
@@ -256,7 +278,7 @@ function CertificateModal({
           <div className="space-y-3 mb-5">
             {[
               { label: "Certificate ID",    value: certId,                     mono: true },
-              { label: "Issued To",         value: "User",                     mono: false },
+              { label: "Issued To",         value: issuedTo,                   mono: false },
               { label: "Date Issued",       value: today,                      mono: false },
               { label: "Data Broker",       value: broker.name,                mono: false },
               { label: "Domain",            value: broker.url,                 mono: true },
@@ -272,7 +294,7 @@ function CertificateModal({
             <div className="flex justify-between items-start gap-4">
               <span className="text-xs text-zinc-400 shrink-0 w-36">Verification</span>
               <span className="text-xs text-zinc-500 font-mono text-right break-all">
-                sha256:{hash.slice(0, 16)}...{hash.slice(-4)}
+                {hash ? `sha256:${hash.slice(0, 16)}...${hash.slice(-4)}` : "computing…"}
               </span>
             </div>
           </div>
@@ -332,6 +354,18 @@ export default function BrokersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
+  const [userName, setUserName] = useState("");
+
+  // Fetch the authenticated user's real name for the removal certificate
+  useEffect(() => {
+    fetch("/api/user/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        const u = json?.data ?? json;
+        if (u) setUserName([u.firstName, u.lastName].filter(Boolean).join(" "));
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch brokers from real API
   useEffect(() => {
@@ -786,7 +820,7 @@ export default function BrokersPage() {
       {/* ── Certificate Modal ── */}
       <AnimatePresence>
         {certBroker && (
-          <CertificateModal broker={certBroker} onClose={() => setCertBroker(null)} />
+          <CertificateModal broker={certBroker} userName={userName} onClose={() => setCertBroker(null)} />
         )}
       </AnimatePresence>
     </div>

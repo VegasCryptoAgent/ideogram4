@@ -111,10 +111,12 @@ interface PersonalInfo {
 
 function Step1({
   onNext,
+  saving,
   info,
   setInfo,
 }: {
   onNext: () => void
+  saving: boolean
   info: PersonalInfo
   setInfo: (v: PersonalInfo) => void
 }) {
@@ -229,10 +231,10 @@ function Step1({
       {/* CTA */}
       <Button
         onClick={onNext}
-        disabled={!valid}
+        disabled={!valid || saving}
         className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-semibold h-11 text-sm"
       >
-        Start Scan
+        {saving ? 'Saving…' : 'Start Scan'}
         <ArrowRight className="w-4 h-4 ml-2" />
       </Button>
     </div>
@@ -243,7 +245,7 @@ function Step1({
 // Step 2: Live Scan
 // ---------------------------------------------------------------------------
 
-function Step2({ onNext }: { onNext: () => void }) {
+function Step2({ onNext, onSummary }: { onNext: () => void; onSummary: (s: { found: number; total: number }) => void }) {
   const [progress, setProgress] = useState(0)
   const [scanned, setScanned] = useState(0)
   const [total, setTotal] = useState(TOTAL_BROKERS)
@@ -271,6 +273,7 @@ function Step2({ onNext }: { onNext: () => void }) {
         if (data.status === 'completed' || data.status === 'failed') {
           setProgress(100)
           setScanned(data.total || TOTAL_BROKERS)
+          onSummary({ found: data.found ?? 0, total: data.total ?? 0 })
           setDone(true)
           return
         }
@@ -640,7 +643,7 @@ function Step3({ onNext }: { onNext: () => void }) {
 // Step 4: Success
 // ---------------------------------------------------------------------------
 
-function Step4() {
+function Step4({ summary }: { summary: { found: number; total: number } }) {
   const router = useRouter()
 
   return (
@@ -718,8 +721,8 @@ function Step4() {
         className="grid grid-cols-3 gap-4 w-full"
       >
         {[
-          { icon: Shield, value: '76', label: 'Brokers monitored' },
-          { icon: Check, value: '✓', label: 'Removal requests sent' },
+          { icon: Shield, value: summary.total > 0 ? String(summary.total) : '—', label: 'Brokers monitored' },
+          { icon: Check, value: String(summary.found), label: summary.found === 1 ? 'Listing found' : 'Listings found' },
           { icon: Sparkles, value: '7d', label: 'Scan schedule' },
         ].map(({ icon: Icon, value, label }) => (
           <div
@@ -768,6 +771,8 @@ const STEP_TITLES = [
 export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState(1)
+  const [savingStep1, setSavingStep1] = useState(false)
+  const [scanSummary, setScanSummary] = useState<{ found: number; total: number }>({ found: 0, total: 0 })
   const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
     firstName: '',
     lastName: '',
@@ -780,6 +785,41 @@ export default function OnboardingPage() {
   function goNext() {
     setDirection(1)
     setStep(s => Math.min(s + 1, 3))
+  }
+
+  // Persist the Step 1 personal info before advancing to the scan step so the
+  // scanner has the real name/location to search data brokers with.
+  async function saveStep1AndAdvance() {
+    if (savingStep1) return
+    setSavingStep1(true)
+    try {
+      await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: personalInfo.firstName.trim(),
+          lastName: personalInfo.lastName.trim(),
+          dateOfBirth: personalInfo.dob ? personalInfo.dob : null,
+          ...(personalInfo.phone.trim() ? { realPhones: [personalInfo.phone.trim()] } : {}),
+        }),
+      })
+      if (personalInfo.city.trim() && personalInfo.state.trim()) {
+        await fetch('/api/user/addresses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city: personalInfo.city.trim(),
+            state: personalInfo.state.trim(),
+            isPrimary: true,
+          }),
+        })
+      }
+    } catch {
+      // Non-blocking — proceed to scan even if persistence had a transient error
+    } finally {
+      setSavingStep1(false)
+      goNext()
+    }
   }
 
   return (
@@ -810,14 +850,15 @@ export default function OnboardingPage() {
             >
               {step === 0 && (
                 <Step1
-                  onNext={goNext}
+                  onNext={saveStep1AndAdvance}
+                  saving={savingStep1}
                   info={personalInfo}
                   setInfo={setPersonalInfo}
                 />
               )}
-              {step === 1 && <Step2 onNext={goNext} />}
+              {step === 1 && <Step2 onNext={goNext} onSummary={setScanSummary} />}
               {step === 2 && <Step3 onNext={goNext} />}
-              {step === 3 && <Step4 />}
+              {step === 3 && <Step4 summary={scanSummary} />}
             </motion.div>
           </AnimatePresence>
         </div>

@@ -386,6 +386,8 @@ function mapApiBreach(a: {
   dataExposed: string[]
   isRead: boolean
   sourceUrl: string | null
+  pwnCount?: number | null
+  domain?: string | null
   createdAt: string
 }): Breach {
   const exposed = a.dataExposed ?? []
@@ -397,14 +399,14 @@ function mapApiBreach(a: {
   return {
     id: a.id,
     name: a.breachName,
-    domain: a.sourceUrl?.replace(/^https?:\/\/[^/]+\/[^#]+#?/, '') ?? a.breachName.toLowerCase(),
+    domain: a.domain || (a.sourceUrl?.replace(/^https?:\/\/[^/]+\/[^#]+#?/, '') ?? a.breachName.toLowerCase()),
     breachDate: a.breachDate ? a.breachDate.split('T')[0] : 'Unknown',
     addedDate: a.createdAt.split('T')[0],
     dataExposed: exposed,
     severity,
     description: `Your data was found in the ${a.breachName} breach. Exposed: ${exposed.join(', ')}.`,
     isRead: a.isRead,
-    recordCount: 0,
+    recordCount: a.pwnCount ?? 0,
   }
 }
 
@@ -641,9 +643,11 @@ export default function BreachPage() {
                               SSN EXPOSED
                             </Badge>
                           )}
-                          <span className="text-xs text-zinc-500">
-                            {formatCount(breach.recordCount)} records
-                          </span>
+                          {breach.recordCount > 0 && (
+                            <span className="text-xs text-zinc-500">
+                              {formatCount(breach.recordCount)} accounts affected
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-zinc-400">
                           {breach.domain} · Breached {breach.breachDate} · Reported{' '}

@@ -172,7 +172,7 @@ export default function DashboardPage() {
 
       // Last scan
       if (results[6].status === "fulfilled") {
-        const d = results[6].value?.data;
+        const d = results[6].value?.data?.job;
         if (d) setLastScan(d);
       }
 
@@ -294,9 +294,9 @@ export default function DashboardPage() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Database}    label="Brokers Found"        value={loading ? "—" : String(brokersFound)} trend={-12} trendLabel="from initial scan" color="red"    loading={loading} />
+        <StatCard icon={Database}    label="Brokers Found"        value={loading ? "—" : String(brokersFound)}                                             color="red"    loading={loading} />
         <StatCard icon={Clock}       label="Removals In Progress" value={loading ? "—" : String(inProgress)}                                               color="amber"  loading={loading} />
-        <StatCard icon={CheckCircle} label="Removals Complete"    value={loading ? "—" : String(removed)}      trend={5}   trendLabel="this week"          color="green"  loading={loading} />
+        <StatCard icon={CheckCircle} label="Removals Complete"    value={loading ? "—" : String(removed)}                                                  color="green"  loading={loading} />
         <StatCard icon={Shield}      label="Privacy Score"        value={loading ? "—" : String(privacyScore)} trendLabel="out of 100"                     color="orange" loading={loading} />
       </div>
 
@@ -309,7 +309,7 @@ export default function DashboardPage() {
           <PrivacyScore score={privacyScore} size="lg" />
           <div className="w-full mt-5 space-y-3">
             {[
-              { label: "Broker Removals", value: brokerStats ? Math.round((removed / Math.max(brokersFound + removed, 1)) * 100) : 83, color: "bg-[#F97316]" },
+              { label: "Broker Removals", value: brokerStats ? Math.round((removed / Math.max(brokersFound + removed, 1)) * 100) : 0, color: "bg-[#F97316]" },
               { label: "Breach Safety",   value: breaches.length === 0 ? 100 : Math.max(0, 100 - breaches.length * 15),              color: "bg-amber-400"  },
               { label: "Contact Shield",  value: Math.min(100, (aliases.length + phones.length) * 30),                                color: "bg-green-500"  },
             ].map(({ label, value, color }) => (

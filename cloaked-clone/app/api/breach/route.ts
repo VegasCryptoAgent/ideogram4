@@ -77,6 +77,8 @@ export async function POST() {
             data: {
               dataExposed: breach.DataClasses || [],
               breachDate: breach.BreachDate ? new Date(breach.BreachDate) : null,
+              pwnCount: breach.PwnCount ?? null,
+              domain: breach.Domain || null,
             },
           })
         }
@@ -88,6 +90,8 @@ export async function POST() {
             breachDate: breach.BreachDate ? new Date(breach.BreachDate) : null,
             dataExposed: breach.DataClasses || [],
             sourceUrl: `https://haveibeenpwned.com/PwnedWebsites#${breach.Name}`,
+            pwnCount: breach.PwnCount ?? null,
+            domain: breach.Domain || null,
             isRead: false,
           },
         })

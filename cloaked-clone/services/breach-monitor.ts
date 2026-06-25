@@ -136,6 +136,8 @@ export async function checkEmailForBreaches(
         dataExposed: breach.DataClasses,
         isRead: false,
         sourceUrl,
+        pwnCount: breach.PwnCount ?? null,
+        domain: breach.Domain || null,
       },
     });
 
@@ -221,6 +223,8 @@ export async function processNewBreaches(
         dataExposed: breach.DataClasses,
         isRead: false,
         sourceUrl: `https://haveibeenpwned.com/account/${encodeURIComponent(user.email)}`,
+        pwnCount: breach.PwnCount ?? null,
+        domain: breach.Domain || null,
       },
     });
 

@@ -27,6 +27,7 @@ const updateProfileSchema = z.object({
     .optional()
     .nullable(),
   realPhones: z.array(z.string().min(7).max(20)).optional(),
+  notificationSettings: z.record(z.unknown()).optional(),
 });
 
 // ── GET /api/user/profile ─────────────────────────────────────
@@ -48,6 +49,7 @@ export async function GET(): Promise<NextResponse> {
         dateOfBirth: true,
         image: true,
         realPhones: true,
+        notificationSettings: true,
         privacyScore: true,
         lastScanAt: true,
         onboardingDone: true,
@@ -92,7 +94,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const parsed = updateProfileSchema.safeParse(body);
     if (!parsed.success) return handleZodError(parsed.error);
 
-    const { firstName, lastName, middleName, dateOfBirth, realPhones } = parsed.data;
+    const { firstName, lastName, middleName, dateOfBirth, realPhones, notificationSettings } = parsed.data;
 
     const updatedUser = await prisma.user.update({
       where: { id: session.id },
@@ -104,6 +106,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
           dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         }),
         ...(realPhones !== undefined && { realPhones }),
+        ...(notificationSettings !== undefined && { notificationSettings: notificationSettings as object }),
         // Keep name in sync
         ...(firstName !== undefined || lastName !== undefined
           ? {

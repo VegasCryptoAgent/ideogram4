@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   User, Lock, Bell, CreditCard, Trash2, Download, Eye, EyeOff, Check,
-  AlertTriangle, HelpCircle, MessageCircle, Mail, Phone, ChevronDown,
+  AlertTriangle, HelpCircle, Mail, Phone, ChevronDown,
   Shield, FileText, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -157,6 +157,12 @@ export default function SettingsPage() {
             zip: a.zipCode ?? a.zip ?? '',
           }))
         )
+        // Load persisted notification preferences
+        const ns = d.notificationSettings
+        if (ns && typeof ns === 'object') {
+          if (ns.email) setEmailNotifs((prev) => ({ ...prev, ...ns.email }))
+          if (ns.sms) setSmsNotifs((prev) => ({ ...prev, ...ns.sms }))
+        }
       })
       .catch(() => {})
       .finally(() => setProfileLoading(false))
@@ -179,6 +185,65 @@ export default function SettingsPage() {
   function saveSection(section: string) {
     setSaved(section)
     setTimeout(() => setSaved(null), 2500)
+  }
+
+  const [savingNotifs, setSavingNotifs] = useState(false)
+  const [savingAddrId, setSavingAddrId] = useState<string | null>(null)
+
+  async function saveAddress(addr: { id: string; street: string; city: string; state: string; zip: string }) {
+    if (!addr.city.trim() || !addr.state.trim()) return
+    setSavingAddrId(addr.id)
+    try {
+      const isNew = addr.id.startsWith('new-')
+      const res = await fetch(
+        isNew ? '/api/user/addresses' : `/api/user/addresses/${addr.id}`,
+        {
+          method: isNew ? 'POST' : 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            street: addr.street || undefined,
+            city: addr.city,
+            state: addr.state,
+            zip: addr.zip || undefined,
+            ...(isNew && addresses.length === 0 ? { isPrimary: true } : {}),
+          }),
+        },
+      )
+      if (res.ok) {
+        setSaved('addr')
+        setTimeout(() => setSaved(null), 2500)
+        loadProfile() // re-sync to get the real DB id for newly-added rows
+      }
+    } finally {
+      setSavingAddrId(null)
+    }
+  }
+
+  async function removeAddress(id: string) {
+    if (id.startsWith('new-')) {
+      setAddresses((prev) => prev.filter((a) => a.id !== id))
+      return
+    }
+    const res = await fetch(`/api/user/addresses/${id}`, { method: 'DELETE' })
+    if (res.ok) setAddresses((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  async function saveNotifications() {
+    if (savingNotifs) return
+    setSavingNotifs(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationSettings: { email: emailNotifs, sms: smsNotifs } }),
+      })
+      if (res.ok) {
+        setSaved('notifs')
+        setTimeout(() => setSaved(null), 2500)
+      }
+    } finally {
+      setSavingNotifs(false)
+    }
   }
 
   async function handleChangePassword() {
@@ -251,15 +316,9 @@ export default function SettingsPage() {
     setNewPhone('')
   }
 
-  function downloadInvoice(date: string, amount: string) {
-    const content = `SHIELD PRIVACY, INC.\nInvoice\n\nDate: ${date}\nDescription: Shield Premium Subscription\nAmount: ${amount}\nStatus: Paid\n\nThank you for being a Shield member.\nsupport@shield.id`
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `shield-invoice-${date.replace(/\s/g, '-')}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+  function openInvoice(row: { invoicePdf: string | null; hostedUrl: string | null }) {
+    const url = row.invoicePdf ?? row.hostedUrl
+    if (url) window.open(url, '_blank')
   }
 
   async function exportAliasesCSV() {
@@ -303,22 +362,14 @@ export default function SettingsPage() {
     setCancelStep(0)
   }
 
-  const [billingHistory, setBillingHistory] = useState<{ date: string; description: string; amount: string; status: string }[]>([])
+  const [billingHistory, setBillingHistory] = useState<{ id: string; date: string; description: string; amount: string; status: string; invoicePdf: string | null; hostedUrl: string | null }[]>([])
   useEffect(() => {
-    // Load invoices from Stripe via subscription portal data
-    fetch('/api/subscription')
+    // Load real Stripe invoices
+    fetch('/api/subscription/invoices')
       .then(r => r.json())
       .then(json => {
-        const d = json.data ?? json
-        if (d.stripe?.currentPeriodStart && d.planName) {
-          const price = d.planName === 'Starter' ? '$4.99' : d.planName === 'Pro' ? '$9.99' : d.planName === 'Ultimate' ? '$19.99' : ''
-          if (price) {
-            const start = new Date(d.stripe.currentPeriodStart)
-            setBillingHistory([
-              { date: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), description: `Shield ${d.planName}`, amount: price, status: 'Paid' },
-            ])
-          }
-        }
+        const invoices = json.data?.invoices ?? json.invoices ?? []
+        if (Array.isArray(invoices)) setBillingHistory(invoices)
       }).catch(() => {})
   }, [])
 
@@ -469,9 +520,22 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="col-span-2 sm:col-span-4 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-violet-600 hover:bg-violet-700"
+                      disabled={savingAddrId === addr.id || !addr.city.trim() || !addr.state.trim()}
+                      onClick={() => saveAddress(addr)}
+                    >
+                      {saved === 'addr' ? <><Check className="w-3.5 h-3.5 mr-1.5" /> Saved</> : savingAddrId === addr.id ? 'Saving…' : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => removeAddress(addr.id)}>
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Remove
+                    </Button>
+                  </div>
                 </div>
               ))}
-              <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 w-full" onClick={() => setAddresses((prev) => [...prev, { id: Date.now().toString(), street: '', city: '', state: 'TX', zip: '' }])}>
+              <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800 w-full" onClick={() => setAddresses((prev) => [...prev, { id: `new-${Date.now()}`, street: '', city: '', state: 'TX', zip: '' }])}>
                 + Add Address
               </Button>
             </CardContent>
@@ -559,8 +623,8 @@ export default function SettingsPage() {
               ))}
             </CardContent>
           </Card>
-          <Button onClick={() => saveSection('notifs')} className="bg-violet-600 hover:bg-violet-700">
-            {saved === 'notifs' ? <><Check className="w-4 h-4 mr-2" /> Saved!</> : 'Save Preferences'}
+          <Button onClick={saveNotifications} disabled={savingNotifs} className="bg-violet-600 hover:bg-violet-700">
+            {saved === 'notifs' ? <><Check className="w-4 h-4 mr-2" /> Saved!</> : savingNotifs ? 'Saving…' : 'Save Preferences'}
           </Button>
         </TabsContent>
 
@@ -729,7 +793,7 @@ export default function SettingsPage() {
                     {billingHistory.length === 0 ? (
                       <tr><td colSpan={5} className="py-6 text-center text-zinc-500 text-sm">No billing history yet.</td></tr>
                     ) : billingHistory.map((row) => (
-                      <tr key={row.date} className="border-b border-white/5 last:border-0">
+                      <tr key={row.id} className="border-b border-white/5 last:border-0">
                         <td className="py-3 text-zinc-300">{row.date}</td>
                         <td className="py-3 text-zinc-300">{row.description}</td>
                         <td className="py-3 text-white font-medium">{row.amount}</td>
@@ -739,13 +803,17 @@ export default function SettingsPage() {
                           </Badge>
                         </td>
                         <td className="py-3">
-                          <button
-                            onClick={() => downloadInvoice(row.date, row.amount)}
-                            className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition-colors"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="text-xs">Download</span>
-                          </button>
+                          {row.invoicePdf || row.hostedUrl ? (
+                            <button
+                              onClick={() => openInvoice(row)}
+                              className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition-colors"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span className="text-xs">Download</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-zinc-600">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1041,25 +1109,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Support channel cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Live Chat */}
-            <Card className="bg-white/5 border-white/10">
-              <CardContent className="pt-5 space-y-4">
-                <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
-                  <MessageCircle className="w-5 h-5 text-orange-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold mb-1">Live Chat</h3>
-                  <p className="text-zinc-400 text-xs leading-relaxed">
-                    Real support agents available Mon–Sun, 8am–10pm ET. Avg response: under 3 minutes.
-                  </p>
-                </div>
-                <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm">
-                  Start Chat
-                </Button>
-              </CardContent>
-            </Card>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Email */}
             <Card className="bg-white/5 border-white/10">
               <CardContent className="pt-5 space-y-4">
