@@ -5,9 +5,12 @@ on:
     branches: [main, claude/cloaked-app-reverse-engineer-4umHY]
     paths:
       - 'cloaked-clone/**'
+      - '.github/workflows/**'
   pull_request:
     paths:
       - 'cloaked-clone/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   build:
