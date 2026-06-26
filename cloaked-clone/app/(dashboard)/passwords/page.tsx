@@ -34,6 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
+import { startRegistration } from "@simplewebauthn/browser";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,12 +54,31 @@ interface PasswordEntry {
   breached?: boolean;
 }
 
+interface VaultMember {
+  id: string;
+  email: string;
+  role: string;
+  userId: string | null;
+}
+
 interface SharedVault {
   id: string;
   name: string;
-  members: { name: string; color: string; initials: string }[];
+  isOwner: boolean;
+  memberCount: number;
   itemCount: number;
+  members: VaultMember[];
   createdAt: string;
+}
+
+interface SecurityKey {
+  id: string;
+  nickname: string | null;
+  deviceType: string | null;
+  backedUp: boolean;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -343,9 +363,35 @@ function PasswordHealthScore({
 
 // ─── Create Vault Dialog ──────────────────────────────────────────────────────
 
-function CreateVaultDialog({ onClose }: { onClose: () => void }) {
+function CreateVaultDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/vaults', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), inviteEmail: email.trim() }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? 'Could not create vault');
+        return;
+      }
+      onCreated();
+      onClose();
+    } catch {
+      setError('Could not create vault');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <motion.div
@@ -383,7 +429,7 @@ function CreateVaultDialog({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <Label className="text-xs text-zinc-400 mb-1.5 block">Invite by Email</Label>
+            <Label className="text-xs text-zinc-400 mb-1.5 block">Invite by Email <span className="text-zinc-600">(optional)</span></Label>
             <Input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -391,6 +437,7 @@ function CreateVaultDialog({ onClose }: { onClose: () => void }) {
               className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600"
             />
           </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
         <div className="flex gap-3 px-6 pb-5">
           <Button
@@ -402,71 +449,13 @@ function CreateVaultDialog({ onClose }: { onClose: () => void }) {
           </Button>
           <Button
             className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
-            onClick={onClose}
+            onClick={submit}
+            disabled={saving || !name.trim()}
           >
             <Users className="w-4 h-4 mr-1.5" />
-            Create Vault
+            {saving ? 'Creating…' : 'Create Vault'}
           </Button>
         </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ─── Yubikey Dialog ───────────────────────────────────────────────────────────
-
-function YubikeyDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 16 }}
-        transition={{ duration: 0.2 }}
-        className="relative w-full max-w-sm bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-8 text-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* Pulsing animation */}
-        <div className="relative flex items-center justify-center w-24 h-24 mx-auto mb-6">
-          <motion.div
-            className="absolute w-24 h-24 rounded-full bg-orange-500/20"
-            animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          />
-          <motion.div
-            className="absolute w-16 h-16 rounded-full bg-orange-500/30"
-            animate={{ scale: [1, 1.3, 1], opacity: [0.8, 0.1, 0.8] }}
-            transition={{ duration: 2, repeat: Infinity, delay: 0.3 }}
-          />
-          <div className="w-12 h-12 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-            <Key className="w-6 h-6 text-orange-400" />
-          </div>
-        </div>
-
-        <h3 className="text-lg font-bold text-white mb-2">Insert Your YubiKey</h3>
-        <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
-          Insert your YubiKey into a USB port and press the button when prompted. Your key will be registered to this account.
-        </p>
-        <Button
-          variant="outline"
-          className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-white"
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
       </motion.div>
     </motion.div>
   );
@@ -1092,13 +1081,15 @@ function mapApiEntry(e: {
 
 export default function PasswordsPage() {
   const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
-  const [vaults] = useState<SharedVault[]>([]);
+  const [vaults, setVaults] = useState<SharedVault[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCreateVault, setShowCreateVault] = useState(false);
-  const [showYubikey, setShowYubikey] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [passwordsLoading, setPasswordsLoading] = useState(true);
+  const [credentials, setCredentials] = useState<SecurityKey[]>([]);
+  const [registeringKey, setRegisteringKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
   const fetchPasswords = useCallback(async () => {
     try {
@@ -1112,7 +1103,72 @@ export default function PasswordsPage() {
     }
   }, [])
 
-  useEffect(() => { fetchPasswords() }, [fetchPasswords])
+  const fetchVaults = useCallback(async () => {
+    try {
+      const res = await fetch('/api/vaults')
+      if (!res.ok) return
+      const json = await res.json()
+      const list: SharedVault[] = json.data?.vaults ?? []
+      setVaults(list)
+    } catch { /* leave empty */ }
+  }, [])
+
+  const fetchCredentials = useCallback(async () => {
+    try {
+      const res = await fetch('/api/webauthn/credentials')
+      if (!res.ok) return
+      const json = await res.json()
+      setCredentials(json.data?.credentials ?? [])
+    } catch { /* leave empty */ }
+  }, [])
+
+  useEffect(() => { fetchPasswords(); fetchVaults(); fetchCredentials() }, [fetchPasswords, fetchVaults, fetchCredentials])
+
+  async function handleDeleteVault(id: string) {
+    setVaults((prev) => prev.filter((v) => v.id !== id))
+    await fetch(`/api/vaults/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  async function registerSecurityKey(nickname: string) {
+    if (registeringKey) return
+    setRegisteringKey(true)
+    setKeyError(null)
+    try {
+      // Step 1: get registration options from the server.
+      const optsRes = await fetch('/api/webauthn/register/options', { method: 'POST' })
+      if (!optsRes.ok) { setKeyError('Could not start registration'); return }
+      const options = (await optsRes.json()).data
+
+      // Step 2: invoke the browser/OS WebAuthn prompt.
+      const attResp = await startRegistration(options)
+
+      // Step 3: send the attestation back to verify and persist.
+      const verifyRes = await fetch('/api/webauthn/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: attResp, nickname }),
+      })
+      if (!verifyRes.ok) {
+        const json = await verifyRes.json().catch(() => ({}))
+        setKeyError(json.error ?? 'Registration failed')
+        return
+      }
+      await fetchCredentials()
+    } catch (err) {
+      // User cancelled the native prompt or the authenticator errored.
+      const msg = err instanceof Error && err.name === 'NotAllowedError'
+        ? 'Registration was cancelled or timed out.'
+        : 'Your browser or device could not complete registration.'
+      setKeyError(msg)
+    } finally {
+      setRegisteringKey(false)
+    }
+  }
+
+  async function removeCredential(id: string) {
+    setCredentials((prev) => prev.filter((c) => c.id !== id))
+    await fetch(`/api/webauthn/credentials/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
 
   const filteredPasswords = passwords.filter(
     (p) =>
@@ -1287,25 +1343,72 @@ export default function PasswordsPage() {
             </Button>
           </div>
 
-          {/* Shared vaults empty state */}
-          <Card className="border-white/10 bg-white/5">
-            <CardContent className="py-14 flex flex-col items-center text-center">
-              <Shield className="w-16 h-16 text-zinc-600 mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">No shared vaults yet</h3>
-              <p className="text-sm text-zinc-400 max-w-sm mb-6 leading-relaxed">
-                Create a vault to securely share passwords with family or teammates.
-                All sharing is end-to-end encrypted — no one else can read your secrets.
-              </p>
-              <Button
-                variant="outline"
-                className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                onClick={() => setShowCreateVault(true)}
-              >
-                <Plus className="w-4 h-4 mr-1.5" />
-                Create Your First Vault
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Shared vaults list / empty state */}
+          {vaults.length === 0 ? (
+            <Card className="border-white/10 bg-white/5">
+              <CardContent className="py-14 flex flex-col items-center text-center">
+                <Shield className="w-16 h-16 text-zinc-600 mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">No shared vaults yet</h3>
+                <p className="text-sm text-zinc-400 max-w-sm mb-6 leading-relaxed">
+                  Create a vault to securely share passwords with family or teammates.
+                  Members you invite get access; everyone else is locked out.
+                </p>
+                <Button
+                  variant="outline"
+                  className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  onClick={() => setShowCreateVault(true)}
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Create Your First Vault
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {vaults.map((vault) => (
+                <Card key={vault.id} className="border-white/10 bg-white/5">
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                          <Users className="w-5 h-5 text-violet-400" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-white">{vault.name}</h4>
+                          <p className="text-xs text-zinc-400">
+                            {vault.memberCount} member{vault.memberCount !== 1 ? 's' : ''} · {vault.itemCount} item{vault.itemCount !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      {vault.isOwner && (
+                        <button
+                          onClick={() => handleDeleteVault(vault.id)}
+                          className="text-zinc-500 hover:text-red-400 transition-colors"
+                          title="Delete vault"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {vault.members.map((m) => (
+                        <span
+                          key={m.id}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-zinc-300"
+                          title={m.role === 'owner' ? 'Owner' : 'Member'}
+                        >
+                          {m.email}
+                        </span>
+                      ))}
+                    </div>
+                    {!vault.isOwner && (
+                      <p className="text-[11px] text-zinc-500">Shared with you</p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab 3: Security Keys ── */}
@@ -1323,32 +1426,92 @@ export default function PasswordsPage() {
             </div>
           </div>
 
-          {/* Empty state */}
-          <Card className="border-white/10 bg-white/5">
-            <CardContent className="py-14 flex flex-col items-center text-center">
-              <Shield className="w-16 h-16 text-zinc-600 mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">No hardware keys registered</h3>
-              <p className="text-sm text-zinc-400 max-w-sm mb-8 leading-relaxed">
-                Add a hardware key for phishing-resistant authentication that keeps your accounts safe even if your password is compromised.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white font-semibold"
-                  onClick={() => setShowYubikey(true)}
-                >
-                  <Key className="w-4 h-4 mr-1.5" />
-                  Register YubiKey
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                >
-                  <Fingerprint className="w-4 h-4 mr-1.5" />
-                  Add Passkey
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Registered keys / empty state */}
+          {credentials.length > 0 && (
+            <Card className="border-white/10 bg-white/5">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base font-semibold text-white">Registered Keys</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white font-semibold"
+                    onClick={() => registerSecurityKey('Security key')}
+                    disabled={registeringKey}
+                  >
+                    <Key className="w-4 h-4 mr-1.5" />
+                    {registeringKey ? 'Waiting…' : 'Add Another'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {credentials.map((cred) => (
+                  <div key={cred.id} className="flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center">
+                        {cred.deviceType === 'multiDevice'
+                          ? <Fingerprint className="w-4 h-4 text-violet-400" />
+                          : <Key className="w-4 h-4 text-orange-400" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">
+                          {cred.nickname ?? (cred.deviceType === 'multiDevice' ? 'Passkey' : 'Security Key')}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          Added {new Date(cred.createdAt).toLocaleDateString()}
+                          {cred.backedUp ? ' · synced' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeCredential(cred.id)}
+                      className="text-zinc-500 hover:text-red-400 transition-colors"
+                      title="Remove key"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {credentials.length === 0 && (
+            <Card className="border-white/10 bg-white/5">
+              <CardContent className="py-14 flex flex-col items-center text-center">
+                <Shield className="w-16 h-16 text-zinc-600 mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">No hardware keys registered</h3>
+                <p className="text-sm text-zinc-400 max-w-sm mb-8 leading-relaxed">
+                  Add a hardware key or passkey for phishing-resistant authentication that keeps your account safe even if your password is compromised.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white font-semibold"
+                    onClick={() => registerSecurityKey('Security key')}
+                    disabled={registeringKey}
+                  >
+                    <Key className="w-4 h-4 mr-1.5" />
+                    {registeringKey ? 'Waiting for key…' : 'Register YubiKey'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                    onClick={() => registerSecurityKey('Passkey')}
+                    disabled={registeringKey}
+                  >
+                    <Fingerprint className="w-4 h-4 mr-1.5" />
+                    Add Passkey
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {keyError && (
+            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              {keyError}
+            </div>
+          )}
 
           {/* Info cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1440,11 +1603,7 @@ export default function PasswordsPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showCreateVault && <CreateVaultDialog onClose={() => setShowCreateVault(false)} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showYubikey && <YubikeyDialog onClose={() => setShowYubikey(false)} />}
+        {showCreateVault && <CreateVaultDialog onClose={() => setShowCreateVault(false)} onCreated={fetchVaults} />}
       </AnimatePresence>
     </div>
   );

@@ -45,6 +45,10 @@ model User {
   passwordEntries    PasswordEntry[]
   virtualCards       VirtualCard[]
   autoCloakSettings  AutoCloakSetting[]
+  ownedVaults        SharedVault[]        @relation("VaultOwner")
+  vaultMemberships   SharedVaultMember[]
+  webAuthnCredentials WebAuthnCredential[]
+  webAuthnChallenge  String?
 }
 
 model UserAddress {
@@ -216,8 +220,57 @@ model PasswordEntry {
   notes             String?
   breached          Boolean  @default(false)
   sharedVaultId     String?
+  sharedVault       SharedVault? @relation(fields: [sharedVaultId], references: [id], onDelete: SetNull)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sharedVaultId])
+}
+
+// ── Shared password vaults ─────────────────────────────────────
+model SharedVault {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation("VaultOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   SharedVaultMember[]
+  entries   PasswordEntry[]
+
+  @@index([ownerId])
+}
+
+model SharedVaultMember {
+  id        String   @id @default(cuid())
+  vaultId   String
+  vault     SharedVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  role      String   @default("member") // owner | member
+  createdAt DateTime @default(now())
+
+  @@unique([vaultId, email])
+  @@index([vaultId])
+}
+
+// ── WebAuthn / FIDO2 hardware keys & passkeys ──────────────────
+model WebAuthnCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      Int      @default(0)
+  transports   String[]
+  deviceType   String?
+  backedUp     Boolean  @default(false)
+  nickname     String?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
 
   @@index([userId])
 }
