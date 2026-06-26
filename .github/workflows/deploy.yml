@@ -14,16 +14,32 @@ on:
 
 jobs:
   build:
-    name: Type Check & Build
+    name: Type Check, Build & Smoke Test
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cloaked-clone
 
-    # Build-time placeholders so Prisma/Next never fail on missing config.
-    # These are NOT real secrets — runtime values come from Railway's env.
+    # Real Postgres so `prisma db push` and the /api/health DB check exercise
+    # the same path Railway runs at startup.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shield_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # NEXTAUTH_SECRET is a CI-only placeholder; real values come from Railway.
     env:
-      DATABASE_URL: 'postgresql://user:pass@localhost:5432/build?schema=public'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/shield_ci?schema=public'
       NEXTAUTH_SECRET: 'ci-build-placeholder-not-used-at-runtime'
       NEXTAUTH_URL: 'http://localhost:3000'
       NEXT_PUBLIC_APP_URL: 'http://localhost:3000'
@@ -43,8 +59,35 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Push schema to test DB (same as Railway startup)
+        run: npx prisma db push --accept-data-loss --skip-generate
+
       - name: Type check
         run: npx tsc --noEmit
 
       - name: Production build (same gate Railway runs)
         run: npm run build
+
+      - name: Smoke test — boot server and hit /api/health
+        run: |
+          npm start &
+          SERVER_PID=$!
+          ok=false
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health -o /tmp/health.json; then
+              ok=true; break
+            fi
+            sleep 1
+          done
+          echo "Health response: $(cat /tmp/health.json 2>/dev/null || echo '<no response>')"
+          kill $SERVER_PID 2>/dev/null || true
+          if [ "$ok" != "true" ]; then
+            echo "::error::Server did not respond on /api/health within 30s"
+            exit 1
+          fi
+          # The app booted AND connected to Postgres.
+          if ! grep -q '"db":"ok"' /tmp/health.json; then
+            echo "::error::Server booted but database check did not return ok"
+            exit 1
+          fi
+          echo "Smoke test passed: server booted and DB reachable."
