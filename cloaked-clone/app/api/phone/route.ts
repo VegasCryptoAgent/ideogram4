@@ -24,6 +24,7 @@ const createPhoneSchema = z.object({
     .regex(/^\+?[1-9]\d{7,14}$/, 'Invalid phone number format')
     .optional()
     .default(''),
+  numberType: z.enum(['voip', 'esim']).default('voip'),
 });
 
 // ── GET /api/phone ────────────────────────────────────────────
@@ -79,7 +80,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const parsed = createPhoneSchema.safeParse(body);
     if (!parsed.success) return handleZodError(parsed.error);
 
-    const { areaCode, label, forwardTo } = parsed.data;
+    const { areaCode, label, forwardTo, numberType } = parsed.data;
+
+    // eSIM numbers are carrier-grade SIMs and require a dedicated eSIM/MVNO
+    // provider — they cannot be provisioned through the VoIP (Twilio) path.
+    // Until such a provider is connected (ESIM_PROVIDER_API_KEY), we refuse
+    // honestly rather than silently handing out a VoIP number labeled as eSIM.
+    if (numberType === 'esim' && !process.env.ESIM_PROVIDER_API_KEY) {
+      return errorResponse(
+        'eSIM numbers require a connected carrier provider, which is not enabled on this account yet. You can add a VoIP number now, or contact support to request eSIM access.',
+        503,
+      );
+    }
 
     const virtualPhone = await purchaseVirtualNumber(
       session.id,

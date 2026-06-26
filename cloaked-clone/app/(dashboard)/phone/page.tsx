@@ -18,6 +18,7 @@ import {
   Bot,
   PhoneMissed,
   UserX,
+  AlertTriangle,
   Wifi,
   CreditCard,
   Lock,
@@ -98,6 +99,7 @@ export default function PhonePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingNumber, setAddingNumber] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -254,6 +256,7 @@ export default function PhonePage() {
 
   const addNumber = useCallback(async () => {
     setAddingNumber(true);
+    setAddError(null);
     try {
       const res = await fetch("/api/phone", {
         method: "POST",
@@ -262,11 +265,12 @@ export default function PhonePage() {
           areaCode: newAreaCode || "415",
           label: newLabel || undefined,
           forwardTo: newForward || undefined,
+          numberType: newNumberType,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error ?? "Failed to add number");
+        setAddError(json.error ?? "Failed to add number");
         return;
       }
       // Refetch to get the full object with _count
@@ -277,11 +281,11 @@ export default function PhonePage() {
       setNewForward("");
       setNewNumberType("voip");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to add number");
+      setAddError(err instanceof Error ? err.message : "Failed to add number");
     } finally {
       setAddingNumber(false);
     }
-  }, [newAreaCode, newLabel, newForward, fetchPhones]);
+  }, [newAreaCode, newLabel, newForward, newNumberType, fetchPhones]);
 
   // ── Fetch call logs for a phone ───────────────────────────────────────────
 
@@ -747,8 +751,11 @@ export default function PhonePage() {
               </div>
             </div>
             <div className="shrink-0 sm:pt-1">
-              <Button className="bg-orange-500 hover:bg-orange-600 text-white border-0">
-                Upgrade to eSIM
+              <Button
+                className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+                onClick={() => { setNewNumberType("esim"); setAddError(null); setShowAddModal(true); }}
+              >
+                Request eSIM
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
@@ -806,7 +813,7 @@ export default function PhonePage() {
                 </Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setNewNumberType("voip")}
+                    onClick={() => { setNewNumberType("voip"); setAddError(null); }}
                     className={`rounded-xl p-3 border text-left transition-all ${
                       newNumberType === "voip"
                         ? "border-violet-500/60 bg-violet-500/10"
@@ -823,7 +830,7 @@ export default function PhonePage() {
                     </div>
                   </button>
                   <button
-                    onClick={() => setNewNumberType("esim")}
+                    onClick={() => { setNewNumberType("esim"); setAddError(null); }}
                     className={`rounded-xl p-3 border text-left transition-all ${
                       newNumberType === "esim"
                         ? "border-orange-500/60 bg-orange-500/10"
@@ -885,8 +892,15 @@ export default function PhonePage() {
                 <div className="bg-white/5 rounded-xl p-3 text-xs text-white/40">
                   {newNumberType === "voip"
                     ? "VoIP numbers are free and work for most services. Calls are screened by Call Guard before reaching you."
-                    : "eSIM numbers are carrier-grade and indistinguishable from real SIM numbers. Works with Uber, banks, and financial apps."}
+                    : "eSIM numbers are carrier-grade and indistinguishable from real SIM numbers — they require a connected carrier provider to provision."}
                 </div>
+
+                {addError && (
+                  <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{addError}</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-6">
