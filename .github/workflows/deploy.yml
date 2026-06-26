@@ -10,12 +10,21 @@ on:
       - 'cloaked-clone/**'
 
 jobs:
-  typecheck:
-    name: Type Check
+  build:
+    name: Type Check & Build
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cloaked-clone
+
+    # Build-time placeholders so Prisma/Next never fail on missing config.
+    # These are NOT real secrets — runtime values come from Railway's env.
+    env:
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/build?schema=public'
+      NEXTAUTH_SECRET: 'ci-build-placeholder-not-used-at-runtime'
+      NEXTAUTH_URL: 'http://localhost:3000'
+      NEXT_PUBLIC_APP_URL: 'http://localhost:3000'
+      NEXT_TELEMETRY_DISABLED: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -33,3 +42,6 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Production build (same gate Railway runs)
+        run: npm run build
