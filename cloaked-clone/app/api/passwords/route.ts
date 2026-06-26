@@ -26,7 +26,8 @@ const createSchema = z.object({
 })
 
 function getDerivedKey(userId: string): Buffer {
-  const secret = process.env.NEXTAUTH_SECRET ?? 'fallback-dev-secret-change-in-prod'
+  const secret = process.env.NEXTAUTH_SECRET
+  if (!secret) throw new Error('NEXTAUTH_SECRET is not configured — cannot derive encryption key')
   return Buffer.from(createHmac('sha256', secret).update(userId).digest())
 }
 

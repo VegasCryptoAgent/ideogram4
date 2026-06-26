@@ -202,10 +202,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return new NextResponse('Webhook signature verification failed', { status: 400 });
     }
   } else {
-    // Webhook secret not yet configured — parse event without verification.
-    // This allows subscription updates to flow through while Stripe is being set up.
-    // Set STRIPE_WEBHOOK_SECRET in Railway to enable signature verification.
-    console.warn('[Stripe Webhook] WARNING: STRIPE_WEBHOOK_SECRET not configured — skipping signature verification');
+    // Webhook secret not configured — reject in production, allow in dev for local testing
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Stripe Webhook] STRIPE_WEBHOOK_SECRET not set in production — rejecting unverified request');
+      return new NextResponse('Webhook signature verification required', { status: 400 });
+    }
+    console.warn('[Stripe Webhook] WARNING: STRIPE_WEBHOOK_SECRET not configured — skipping verification (development only)');
     try {
       event = JSON.parse(rawBody) as Stripe.Event;
       if (!event?.type || !event?.data?.object) {

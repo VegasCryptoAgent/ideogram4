@@ -110,7 +110,13 @@ export default function ScannerPage() {
     }
   }, [latestJob?.status, startPolling])
 
+  const profileIncomplete = profile !== null && !profile.firstName && !profile.lastName
+
   const startScan = async () => {
+    if (profileIncomplete) {
+      setError('Please add your name in Settings before scanning — it\'s required to search broker databases.')
+      return
+    }
     setStarting(true)
     setError(null)
     try {
@@ -174,13 +180,19 @@ export default function ScannerPage() {
                       <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                     ))}
                   </div>
-                  {error && (
+                  {profileIncomplete && (
+                    <div className="flex items-center gap-2 text-sm text-amber-400 mb-3 p-3 bg-amber-400/10 rounded-xl border border-amber-400/20">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>Your name is missing. <a href="/settings" className="underline">Add it in Settings</a> so we can search broker databases for your records.</span>
+                    </div>
+                  )}
+                  {error && !profileIncomplete && (
                     <div className="flex items-center gap-2 text-sm text-amber-400 mb-3">
                       <AlertTriangle className="w-4 h-4" />
                       {error}
                     </div>
                   )}
-                  <Button onClick={startScan} size="lg" disabled={starting}>
+                  <Button onClick={startScan} size="lg" disabled={starting || profileIncomplete}>
                     {starting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
                     {starting ? 'Starting…' : 'Start Full Scan'}
                   </Button>

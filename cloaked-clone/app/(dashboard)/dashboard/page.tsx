@@ -88,6 +88,12 @@ const activityStyle: Record<string, { dot: string; label: string; badge: string 
   removal_requested: { dot: "bg-violet-500", label: "Requested from", badge: "bg-violet-100 text-violet-700" },
 };
 
+function getGreeting(name: string): string {
+  const hour = new Date().getHours();
+  const time = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  return name ? `${time}, ${name}` : time;
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -116,6 +122,7 @@ export default function DashboardPage() {
   const [lastScan, setLastScan]           = useState<ScanStatus | null>(null);
   const [planName, setPlanName]           = useState("Free");
   const [removalData, setRemovalData]     = useState<{ month: string; found: number; removed: number }[]>([]);
+  const [firstName, setFirstName]         = useState<string>("");
 
   useEffect(() => {
     async function loadAll() {
@@ -129,6 +136,7 @@ export default function DashboardPage() {
         fetch("/api/scan").then((r) => r.json()),
         fetch("/api/subscription").then((r) => r.json()),
         fetch("/api/scan/history?limit=6").then((r) => r.json()),
+        fetch("/api/user/profile").then((r) => r.json()),
       ]);
 
       // Broker stats
@@ -180,6 +188,12 @@ export default function DashboardPage() {
       if (results[7].status === "fulfilled") {
         const d = results[7].value?.data ?? results[7].value;
         if (d?.planName) setPlanName(d.planName);
+      }
+
+      // User profile — first name for greeting
+      if (results[9].status === "fulfilled") {
+        const d = results[9].value?.data ?? results[9].value;
+        if (d?.firstName) setFirstName(d.firstName);
       }
 
       // Removal trend chart — built from real scan history
@@ -246,7 +260,7 @@ export default function DashboardPage() {
         className="bg-[#141410] rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-xl font-bold text-white mb-1 font-serif">Good morning 👋</h2>
+          <h2 className="text-xl font-bold text-white mb-1 font-serif">{getGreeting(firstName)} 👋</h2>
           <p className="text-white/50 text-sm">
             {loading ? (
               <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</span>

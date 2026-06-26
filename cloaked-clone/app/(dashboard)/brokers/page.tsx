@@ -311,7 +311,7 @@ function CertificateModal({
           {/* Footer text */}
           <div className="border-t border-zinc-200 pt-4 mb-5 text-center">
             <p className="text-[11px] text-zinc-400">
-              Shield Privacy Inc. &nbsp;·&nbsp; SOC 2 Certified &nbsp;·&nbsp; BBB A+ Rated
+              Shield Privacy Inc.
             </p>
             <p className="text-[11px] text-zinc-400">support@shield.id</p>
           </div>
