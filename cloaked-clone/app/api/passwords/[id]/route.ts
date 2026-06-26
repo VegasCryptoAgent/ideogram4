@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { encrypt } from '@/lib/password-crypto'
 
 export async function DELETE(
   _req: Request,
@@ -28,10 +29,21 @@ export async function PATCH(
   const { id } = await params
   const body = await req.json()
 
-  const allowed = ['site', 'url', 'username', 'encryptedPassword', 'strength', 'hasTotp', 'totpSecret', 'tags', 'notes', 'breached']
+  // Plain metadata fields copied through as-is.
+  const allowed = ['site', 'url', 'username', 'strength', 'hasTotp', 'tags', 'notes', 'breached']
   const data: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) data[key] = body[key]
+  }
+
+  // Secrets must be encrypted at rest, exactly like POST /api/passwords.
+  // Accept `password` (new) or `encryptedPassword` (legacy field name) as the plaintext.
+  const plainPassword = body.password ?? body.encryptedPassword
+  if (typeof plainPassword === 'string' && plainPassword.length > 0) {
+    data.encryptedPassword = encrypt(plainPassword, session.user.id)
+  }
+  if (typeof body.totpSecret === 'string' && body.totpSecret.length > 0) {
+    data.totpSecret = encrypt(body.totpSecret, session.user.id)
   }
 
   const entry = await prisma.passwordEntry.updateMany({

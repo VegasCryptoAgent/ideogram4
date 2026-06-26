@@ -533,10 +533,10 @@ export default function BrokersPage() {
         <span className="text-2xl flex-shrink-0">⚡</span>
         <div>
           <p className="text-white font-semibold text-sm">
-            Shield removes your data 3x faster than Cloaked
+            Automated opt-out requests, submitted for you
           </p>
           <p className="text-white/50 text-xs mt-0.5">
-            Average removal: 5 business days. Cloaked averages 3–4 weeks.
+            We file removal requests with each broker and track them through to completion.
           </p>
         </div>
       </motion.div>

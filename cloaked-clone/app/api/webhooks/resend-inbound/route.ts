@@ -13,6 +13,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { processInboundEmail } from '@/services/email-alias-service';
 
 export const dynamic = 'force-dynamic';
@@ -26,9 +27,59 @@ interface ResendInboundPayload {
   headers?: Record<string, string>;
 }
 
+/**
+ * Verify the Svix signature Resend attaches to webhook deliveries. Without
+ * this, anyone could POST a forged "inbound email" and inject spoofed mail
+ * into any user's alias inbox (and have it forwarded to their real address).
+ *
+ * Resend/Svix scheme: signed content = `${id}.${timestamp}.${rawBody}`,
+ * HMAC-SHA256 keyed by the base64-decoded secret (after the `whsec_` prefix),
+ * base64-encoded, matched against any `v1,<sig>` entry in the svix-signature
+ * header. Fails closed in production when the secret is unset; allowed in dev.
+ */
+function verifyResendSignature(req: NextRequest, rawBody: string): boolean {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Resend Inbound] RESEND_WEBHOOK_SECRET not set — rejecting in production');
+      return false;
+    }
+    console.warn('[Resend Inbound] RESEND_WEBHOOK_SECRET not set — skipping verification (development only)');
+    return true;
+  }
+
+  const svixId = req.headers.get('svix-id');
+  const svixTimestamp = req.headers.get('svix-timestamp');
+  const svixSignature = req.headers.get('svix-signature');
+  if (!svixId || !svixTimestamp || !svixSignature) return false;
+
+  try {
+    const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
+    const expected = createHmac('sha256', key).update(signedContent).digest();
+
+    // Header is a space-separated list of `version,signature` pairs.
+    return svixSignature.split(' ').some((part) => {
+      const sig = part.split(',')[1];
+      if (!sig) return false;
+      const provided = Buffer.from(sig, 'base64');
+      return provided.length === expected.length && timingSafeEqual(provided, expected);
+    });
+  } catch (err) {
+    console.error('[Resend Inbound] Signature verification error:', err);
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const body: ResendInboundPayload = await req.json();
+    const rawBody = await req.text();
+
+    if (!verifyResendSignature(req, rawBody)) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    const body: ResendInboundPayload = JSON.parse(rawBody);
 
     const to = body.to?.[0];
     const from = body.from ?? '';

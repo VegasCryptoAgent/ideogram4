@@ -612,26 +612,17 @@ export default function AutoCloakPage() {
                     <div className="flex flex-wrap gap-3">
                       <Button
                         className="bg-[#F97316] hover:bg-orange-600 text-white gap-2"
-                        onClick={() => setExtensionInstalled(true)}
+                        asChild
                       >
-                        <Globe className="h-4 w-4" />
-                        Add to Chrome
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="border-white/20 text-white hover:bg-white/10 gap-2"
-                      >
-                        <Globe className="h-4 w-4" />
-                        Add to Firefox
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="border-white/20 text-white hover:bg-white/10 gap-2"
-                      >
-                        <Globe className="h-4 w-4" />
-                        Add to Safari
+                        <a href="/extension">
+                          <Globe className="h-4 w-4" />
+                          View Install Instructions
+                        </a>
                       </Button>
                     </div>
+                    <p className="text-xs text-zinc-500">
+                      Available for Chromium-based browsers (Chrome, Edge, Brave, Arc).
+                    </p>
                   </div>
 
                   {/* Browser mockup */}

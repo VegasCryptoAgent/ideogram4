@@ -75,7 +75,7 @@ interface ScanStatus {
 }
 
 const QUICK_ACTIONS = [
-  { icon: Scan,  label: "Run Scan Now",       description: "Scan 400+ brokers",  href: "/scanner" },
+  { icon: Scan,  label: "Run Scan Now",       description: "Scan 75+ brokers",   href: "/scanner" },
   { icon: Phone, label: "Add Virtual Number", description: "Get a masked phone",  href: "/phone"   },
   { icon: Mail,  label: "Create Email Alias", description: "Add a new identity",  href: "/email"   },
 ];
@@ -521,7 +521,7 @@ export default function DashboardPage() {
               <Zap className="w-4 h-4 text-[#F97316]" />
               <span className="text-xs font-semibold text-white">{planName} Plan Active</span>
             </div>
-            <p className="text-xs text-white/40 mb-3">Weekly scans · 400+ brokers · Call guard</p>
+            <p className="text-xs text-white/40 mb-3">Weekly scans · 75+ brokers · Call guard</p>
             <Link href="/settings" className="text-xs text-[#F97316] hover:underline font-medium flex items-center gap-1">
               Manage plan <ArrowRight className="w-3 h-3" />
             </Link>

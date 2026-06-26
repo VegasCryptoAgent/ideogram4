@@ -17,7 +17,16 @@ export const dynamic = 'force-dynamic';
 
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.PRIVACY_COM_WEBHOOK_SECRET;
-  if (!secret) return true; // skip in dev if secret not set
+  if (!secret) {
+    // Fail closed in production — an unsigned webhook could forge transactions or
+    // close (delete) cards. Only skip verification in local development.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Privacy.com webhook] PRIVACY_COM_WEBHOOK_SECRET not set — rejecting in production');
+      return false;
+    }
+    console.warn('[Privacy.com webhook] Secret not set — skipping verification (development only)');
+    return true;
+  }
 
   if (!signatureHeader) return false;
 

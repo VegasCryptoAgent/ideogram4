@@ -1266,10 +1266,10 @@ export default function PasswordsPage() {
             <Shield className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-green-300">
-                Shield shared vaults beat Cloaked — they have no shared vault feature at all.
+                Share passwords securely with family or teammates
               </p>
               <p className="text-xs text-green-400/60 mt-0.5">
-                Share passwords securely with family or teammates. Granular permissions, zero-knowledge encryption.
+                Granular permissions and encrypted storage keep shared credentials private.
               </p>
             </div>
           </div>
@@ -1315,10 +1315,10 @@ export default function PasswordsPage() {
             <Zap className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-orange-300">
-                Shield supports hardware security keys — Cloaked does not.
+                Phishing-resistant hardware key authentication
               </p>
               <p className="text-xs text-orange-400/60 mt-0.5">
-                Register a YubiKey or passkey for phishing-resistant authentication no other privacy app can match.
+                Register a YubiKey or passkey to protect your account even if your password is compromised.
               </p>
             </div>
           </div>

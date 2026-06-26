@@ -966,12 +966,12 @@ export default function CardsPage() {
         </div>
         <div>
           <div className="font-bold text-white text-sm mb-1">
-            Virtual cards available now — no waitlist
+            Real spending controls on every card
           </div>
           <p className="text-sm text-zinc-400 leading-relaxed">
-            Unlike Cloaked Pay — which has been stuck behind a waitlist since launch — Shield virtual
-            cards are available immediately with your Premium subscription. Create unlimited
-            merchant-locked, multi-use, and single-use cards with real spending controls.
+            Create merchant-locked, multi-use, and single-use virtual cards with real spending
+            limits. Each card hides your true card number from merchants and can be paused or
+            closed instantly.
           </p>
         </div>
       </div>

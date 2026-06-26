@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/scanner", icon: Scan, label: "Scanner", badge: "New" },
-  { href: "/brokers", icon: Database, label: "Data Brokers", badge: "47" },
+  { href: "/brokers", icon: Database, label: "Data Brokers" },
   { href: "/phone", icon: Phone, label: "Virtual Numbers" },
   { href: "/email", icon: Mail, label: "Email Aliases" },
   { href: "/autocloak", icon: Wand2, label: "AutoCloak", badge: "AI" },

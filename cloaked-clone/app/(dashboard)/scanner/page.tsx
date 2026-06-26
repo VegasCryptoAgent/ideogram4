@@ -173,10 +173,10 @@ export default function ScannerPage() {
                 <div className="flex-1 text-center sm:text-left">
                   <h3 className="text-lg font-semibold mb-2">Ready to scan</h3>
                   <p className="text-white/50 text-sm mb-4">
-                    We'll search 200+ data broker sites for your personal information and automatically request removal from any sites that have your data.
+                    We'll search 75+ data broker sites for your personal information and automatically request removal from any sites that have your data.
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start mb-4">
-                    {["200+ broker sites", "Auto opt-out", "Weekly monitoring"].map((tag) => (
+                    {["75+ broker sites", "Auto opt-out", "Weekly monitoring"].map((tag) => (
                       <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                     ))}
                   </div>

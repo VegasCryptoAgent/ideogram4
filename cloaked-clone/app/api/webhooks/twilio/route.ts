@@ -8,6 +8,7 @@
 //   Call status update  → update call log with duration/status
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
+import twilio from 'twilio';
 import { prisma } from '@/lib/prisma';
 import { evaluateCallSpam } from '@/services/phone-service';
 import { createNotification } from '@/services/notification-service';
@@ -18,16 +19,56 @@ export const dynamic = 'force-dynamic';
 // ── Helpers ────────────────────────────────────────────────────
 
 /**
- * Parse URL-encoded Twilio webhook payload.
+ * Parse a URL-encoded Twilio payload string into a flat object.
  */
-async function parseTwilioPayload(req: NextRequest): Promise<Record<string, string>> {
-  const text = await req.text();
+function parseFormBody(text: string): Record<string, string> {
   const params = new URLSearchParams(text);
   const result: Record<string, string> = {};
   params.forEach((value, key) => {
     result[key] = value;
   });
   return result;
+}
+
+/**
+ * Verify the request actually came from Twilio using the X-Twilio-Signature
+ * header. Without this, anyone could POST forged call/SMS payloads — inflating
+ * spam counters and triggering real outbound SMS at the account's expense.
+ *
+ * Returns true if valid. Fails closed in production when the auth token is
+ * missing; allows through in development for local testing.
+ */
+function verifyTwilioSignature(
+  req: NextRequest,
+  params: Record<string, string>,
+): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Twilio Webhook] TWILIO_AUTH_TOKEN not set — rejecting in production');
+      return false;
+    }
+    console.warn('[Twilio Webhook] TWILIO_AUTH_TOKEN not set — skipping verification (development only)');
+    return true;
+  }
+
+  const signature = req.headers.get('x-twilio-signature');
+  if (!signature) return false;
+
+  // Twilio computes the signature over the exact public URL it was configured
+  // with. Behind a proxy req.url may show an internal host, so prefer the
+  // configured app URL + path.
+  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '');
+  const url = base
+    ? `${base}${req.nextUrl.pathname}${req.nextUrl.search}`
+    : req.url;
+
+  try {
+    return twilio.validateRequest(authToken, signature, url, params);
+  } catch (err) {
+    console.error('[Twilio Webhook] Signature validation error:', err);
+    return false;
+  }
 }
 
 /**
@@ -246,7 +287,12 @@ async function handleCallStatus(payload: Record<string, string>): Promise<NextRe
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const payload = await parseTwilioPayload(req);
+    const rawBody = await req.text();
+    const payload = parseFormBody(rawBody);
+
+    if (!verifyTwilioSignature(req, payload)) {
+      return new NextResponse('Invalid Twilio signature', { status: 403 });
+    }
 
     const callStatus = payload['CallStatus'];
     const messageStatus = payload['MessageStatus'] || payload['SmsStatus'];

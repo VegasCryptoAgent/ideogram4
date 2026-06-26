@@ -677,7 +677,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 {[
                   ['Weekly scans', '✓'],
-                  ['200+ brokers covered', '✓'],
+                  ['75+ brokers covered', '✓'],
                   ['Virtual phone numbers', phoneUsage],
                   ['Email aliases', aliasUsage],
                   ['Breach monitoring', '✓'],
