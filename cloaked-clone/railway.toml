@@ -2,7 +2,11 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "if [ -n \"$DATABASE_URL\" ]; then npx prisma db push --accept-data-loss && npx tsx scripts/seed-brokers.ts; fi && npm start"
+# Source of truth for the schema is prisma/schema.prisma applied via `db push`
+# (this project does NOT use migrations). Each step is non-fatal and the server
+# ALWAYS starts — a transient db-push/seed hiccup must never crash-loop the
+# deploy and leave the previous build live. Brokers also auto-seed on first scan.
+startCommand = "if [ -n \"$DATABASE_URL\" ]; then npx prisma db push --accept-data-loss --skip-generate || echo '[start] db push failed'; npx tsx scripts/seed-brokers.ts || echo '[start] seed skipped'; fi; npm start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

@@ -7,5 +7,9 @@ cmds = ["npm ci --legacy-peer-deps"]
 [phases.build]
 cmds = ["npx prisma generate", "npm run build"]
 
+# Must match railway.toml's startCommand exactly. This project applies the
+# schema with `db push` (NOT migrations); using `migrate deploy` here would skip
+# every model added via db push and could crash-loop on drift, leaving the old
+# build live. Each step is non-fatal so the server always starts.
 [start]
-cmd = "if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate resolve --applied 0001_initial 2>/dev/null || true; npx prisma migrate deploy; fi && npm start"
+cmd = "if [ -n \"$DATABASE_URL\" ]; then npx prisma db push --accept-data-loss --skip-generate || echo '[start] db push failed'; npx tsx scripts/seed-brokers.ts || echo '[start] seed skipped'; fi; npm start"
