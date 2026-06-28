@@ -14,7 +14,11 @@ import { prisma } from './prisma';
 import { calculatePrivacyScore } from '../services/privacy-score';
 import { runOptOutJob } from './optout-processor';
 
-const REQUEST_TIMEOUT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 8_000;
+
+// How many brokers to check at once. Sequential checks (76 brokers × up to
+// 8s each) could take ~10 min and look stuck; batching finishes in ~1–2 min.
+const SCAN_CONCURRENCY = 6;
 
 // Bot-detection signals — if the response HTML contains these we can't trust the result
 const BOT_SIGNALS = ['captcha', 'i am not a robot', 'access denied', 'cf-challenge', 'ddos-guard', 'please verify you are a human'];
@@ -129,6 +133,12 @@ async function checkBrokerForUser(
 export async function runScanJob(userId: string, scanJobId: string): Promise<void> {
   console.log(`[Scanner] Starting inline job ${scanJobId} for user ${userId}`);
 
+  // Mark the job running immediately so the UI reflects progress right away and
+  // a job can never appear stuck at "Queued" once processing has actually begun.
+  await prisma.scanJob
+    .update({ where: { id: scanJobId }, data: { status: 'running', startedAt: new Date() } })
+    .catch((e) => console.error('[Scanner] could not mark running:', e));
+
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -191,17 +201,15 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
 
     await prisma.scanJob.update({
       where: { id: scanJobId },
-      data: { status: 'running', totalBrokers: brokers.length, startedAt: new Date() },
+      data: { totalBrokers: brokers.length },
     });
 
     let found = 0;
     let scanned = 0;
 
-    for (const broker of brokers) {
+    // Check one broker and persist its record. Returns true if a listing was found.
+    const processBroker = async (broker: (typeof brokers)[number]): Promise<boolean> => {
       try {
-        // Stagger requests: 500 ms between each broker to avoid rate-limits
-        if (scanned > 0) await sleep(500);
-
         const existing = await prisma.brokerRecord.findUnique({
           where: { userId_brokerId: { userId, brokerId: broker.id } },
         });
@@ -214,8 +222,8 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
             data: { status: isFound ? 'found' : 'not_found', lastChecked: new Date() },
           });
           if (isFound && existing.status !== 'removal_requested' && existing.status !== 'removed') {
-            found++;
             void runOptOutJob(userId, broker.id, existing.id);
+            return true;
           }
         } else {
           const newRecord = await prisma.brokerRecord.create({
@@ -227,21 +235,31 @@ export async function runScanJob(userId: string, scanJobId: string): Promise<voi
             },
           });
           if (isFound) {
-            found++;
             void runOptOutJob(userId, broker.id, newRecord.id);
+            return true;
           }
         }
-
-        scanned++;
-
-        await prisma.scanJob.update({
-          where: { id: scanJobId },
-          data: { scanned, found },
-        });
+        return false;
       } catch (err) {
         console.error(`[Scanner] Error on broker ${broker.name}:`, err);
-        scanned++;
+        return false;
       }
+    };
+
+    // Process brokers in small concurrent batches so the scan finishes quickly
+    // and the progress counter advances steadily.
+    for (let i = 0; i < brokers.length; i += SCAN_CONCURRENCY) {
+      const batch = brokers.slice(i, i + SCAN_CONCURRENCY);
+      const results = await Promise.all(batch.map(processBroker));
+      found += results.filter(Boolean).length;
+      scanned += batch.length;
+
+      await prisma.scanJob
+        .update({ where: { id: scanJobId }, data: { scanned, found } })
+        .catch((e) => console.error('[Scanner] progress update failed:', e));
+
+      // Brief stagger between batches to stay under broker rate limits.
+      if (i + SCAN_CONCURRENCY < brokers.length) await sleep(300);
     }
 
     await prisma.scanJob.update({

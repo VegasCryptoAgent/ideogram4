@@ -5,6 +5,7 @@
 // GET  /api/scan?all=true → get scan history (last 10 jobs)
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_after as after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { runScanJob } from '@/lib/scan-processor';
 import { getPlanLimits } from '@/lib/stripe';
@@ -63,9 +64,20 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
       data: { userId: session.id, status: 'pending' },
     });
 
-    // Fire-and-forget: process the scan in the background within this same
-    // Node.js process. Safe on Railway (persistent server, not serverless).
-    void runScanJob(session.id, scanJob.id);
+    // Process the scan AFTER the response is sent. `after()` is the supported
+    // Next.js mechanism that GUARANTEES the callback runs once the response
+    // flushes — unlike a bare `void promise`, whose execution context Next can
+    // tear down, leaving the job stuck at "pending" forever.
+    after(async () => {
+      try {
+        await runScanJob(session.id, scanJob.id);
+      } catch (err) {
+        console.error('[Scan after()] runScanJob threw:', err);
+        await prisma.scanJob
+          .update({ where: { id: scanJob.id }, data: { status: 'failed', completedAt: new Date() } })
+          .catch(() => {});
+      }
+    });
 
     return successResponse({
       jobId: scanJob.id,

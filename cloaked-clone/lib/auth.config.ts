@@ -9,6 +9,9 @@ import type { NextAuthConfig } from "next-auth";
  * `lib/auth.ts`, which is only used by the Node-runtime API route.
  */
 export const authConfig = {
+  // Self-hosted behind Railway's proxy — trust the forwarded host so Auth.js
+  // doesn't reject requests with UntrustedHost when AUTH_TRUST_HOST isn't set.
+  trustHost: true,
   session: {
     strategy: "jwt",
   },

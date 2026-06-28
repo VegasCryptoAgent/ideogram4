@@ -30,6 +30,9 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
+    // Required for `unstable_after()` in Next 15.0.x — lets route handlers run
+    // background work (the broker scan) after the response is sent.
+    after: true,
     serverActions: {
       allowedOrigins: ["localhost:3000", "*.shielded.app"],
     },
